@@ -41,7 +41,8 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   }
 
   bool half_pass = false;
-  for (int i = 0; i < pc_pcl.size(); ++i) {
+  std::vector<pcl::PointCloud<pcl::PointXYZI>> scan_pts(64);
+  for (uint i = 0; i < pc_pcl.size(); ++i) {
     pt.x = pc_pcl[i].x;
     pt.y = pc_pcl[i].y;
     pt.z = pc_pcl[i].z;
@@ -92,6 +93,15 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
         }
     }
     pt.intensity = line + scan_period / (end_ori - start_ori) * (ori - start_ori);
+    scan_pts[line].push_back(pt);
+  }
+
+  // For debug
+  for (int i = 0; i < 16; ++i) {
+    sensor_msgs::PointCloud2 scan_msg;
+    pcl::toROSMsg(scan_pts[i], scan_msg);
+    scan_msg.header = pc_msg->header;
+    scan_pubs[i].publish(scan_msg);
   }
 }
 
