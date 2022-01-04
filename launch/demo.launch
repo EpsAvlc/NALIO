@@ -1,0 +1,3 @@
+<launch>
+    <node name="feature_extraction" pkg="nalio" type="feature_extraction" output="screen"/> 
+</launch>

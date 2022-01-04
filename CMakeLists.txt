@@ -39,7 +39,7 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(feature_extraction
+add_executable(feature_extraction
   src/feature_extraction.cpp
 )
 

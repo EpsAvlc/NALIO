@@ -13,27 +13,17 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <ros/ros.h>
 
-std::string lidar_topic = "";
+const std::string lidar_topic = "/velodyne_points";
+const double scan_period = 0.1;
 
-std::vector<ros::Publisher> scan_pubs;
+using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
 
-void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
-  static const double scan_period = 0.1;
-
-  pcl::PointCloud<pcl::PointXYZI> pc_pcl;
-  pcl::fromROSMsg(*pc_msg, pc_pcl);
-
-  std::vector<int> indices;
-  pcl::removeNaNFromPointCloud(pc_pcl, pc_pcl, indices);
-  
-  std::vector<sensor_msgs::PointCloud2> scan_msgs(16);
-  std::vector<pcl::PointCloud<pcl::PointXYZI>> scan_pcs(16);
-
-  int num_points = pc_pcl.size();
+int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>& scan_pts) {
   pcl::PointXYZI pt;
+  int num_points = cloud_in.size();
   // atan2 (-pi, pi] 表示当前点与x轴正方向的夹角，并且从x轴逆时针的角度为正，顺时针的角度为负
-  float start_ori = -atan2(pc_pcl[0].y, pc_pcl[1].x);
-  float end_ori = -atan2(pc_pcl[num_points - 1].y, pc_pcl[num_points-1].x);
+  float start_ori = -atan2(cloud_in[0].y, cloud_in[1].x);
+  float end_ori = -atan2(cloud_in[num_points - 1].y, cloud_in[num_points-1].x);
   if (end_ori - start_ori > 3 * M_PI) {
     end_ori -= 2 * M_PI;
   } else if (end_ori - start_ori < M_PI) {
@@ -41,11 +31,12 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   }
 
   bool half_pass = false;
-  std::vector<pcl::PointCloud<pcl::PointXYZI>> scan_pts(64);
-  for (uint i = 0; i < pc_pcl.size(); ++i) {
-    pt.x = pc_pcl[i].x;
-    pt.y = pc_pcl[i].y;
-    pt.z = pc_pcl[i].z;
+  scan_pts.clear();
+  scan_pts.resize(64);
+  for (uint i = 0; i < cloud_in.size(); ++i) {
+    pt.x = cloud_in[i].x;
+    pt.y = cloud_in[i].y;
+    pt.z = cloud_in[i].z;
 
     float angle = atan(pt.z / sqrt(pt.x * pt.x + pt.y * pt.y)) * 180 / M_PI;
     int line = 0;
@@ -95,14 +86,22 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
     pt.intensity = line + scan_period / (end_ori - start_ori) * (ori - start_ori);
     scan_pts[line].push_back(pt);
   }
+  return 0;
+}
 
-  // For debug
-  for (int i = 0; i < 16; ++i) {
-    sensor_msgs::PointCloud2 scan_msg;
-    pcl::toROSMsg(scan_pts[i], scan_msg);
-    scan_msg.header = pc_msg->header;
-    scan_pubs[i].publish(scan_msg);
-  }
+int extractFeatures(const std::vector<PointCloudT>& scan_pts) {
+
+}
+
+void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
+  PointCloudT pc_pcl;
+  pcl::fromROSMsg(*pc_msg, pc_pcl);
+
+  std::vector<int> indices;
+  pcl::removeNaNFromPointCloud(pc_pcl, pc_pcl, indices);
+  
+  std::vector<PointCloudT> scan_pts;
+  splitScans(pc_pcl, scan_pts);
 }
 
 int main(int argc, char *argv[])
@@ -110,11 +109,7 @@ int main(int argc, char *argv[])
   /* code */
   ros::init(argc, argv, "lidar_odometry");
   ros::NodeHandle nh;
-  nh.subscribe(lidar_topic, 1, lidarCB);
-  scan_pubs.resize(16);
-  for (int i = 0; i < 16; ++i) {
-    scan_pubs[i] = nh.advertise<sensor_msgs::PointCloud2>("scan_" + std::to_string(i), 1);
-  }
+  ros::Subscriber velo_sub = nh.subscribe(lidar_topic, 1, lidarCB);
   ros::spin();
   return 0;
 }
