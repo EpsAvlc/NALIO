@@ -7,6 +7,7 @@
  */
 
 #include <iostream>
+#include <algorithm>
 #include <pcl/point_types.h>
 #include <pcl/filters/filter.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -17,6 +18,15 @@ const std::string lidar_topic = "/velodyne_points";
 const double scan_period = 0.1;
 
 using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
+
+struct PointInfo {
+  float curvature;
+  float label; // 0 未标签 1 edge 2 plane
+  bool neighbor_selected; // 是否其邻居点已被选作Feature点
+  uint16_t ind; // 原本的下标
+};
+
+PointInfo point_infos[64][6250];
 
 int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>& scan_pts) {
   pcl::PointXYZI pt;
@@ -89,7 +99,42 @@ int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>& scan_pts) 
   return 0;
 }
 
-int extractFeatures(const std::vector<PointCloudT>& scan_pts) {
+int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT* edge_feature, PointCloudT* plane_feature) {
+  for (int line = 0; line <= 50; ++line) {
+    const PointCloudT& line_pts = scan_pts[line];
+    for (int i = 5; i < line_pts.size() - 6; ++i) {
+      float diff_x = line_pts[i - 5].x + line_pts[i - 4].x + line_pts[i - 3].x + line_pts[i - 2].x + line_pts[i - 1].x
+      - 10 * line_pts[i].x + line_pts[i + 1].x + line_pts[i + 2].x + line_pts[i + 3].x + line_pts[i + 4].x +
+      line_pts[i + 5].x;
+      float diff_y = line_pts[i - 5].y + line_pts[i - 4].y + line_pts[i - 3].y + line_pts[i - 2].y + line_pts[i - 1].y
+      - 10 * line_pts[i].y + line_pts[i + 1].y + line_pts[i + 2].y + line_pts[i + 3].y + line_pts[i + 4].y +
+      line_pts[i + 5].y;
+      float diff_z = line_pts[i - 5].z + line_pts[i - 4].z + line_pts[i - 3].z + line_pts[i - 2].z + line_pts[i - 1].z
+      - 10 * line_pts[i].z + line_pts[i + 1].z + line_pts[i + 2].z + line_pts[i + 3].z + line_pts[i + 4].z +
+      line_pts[i + 5].z;
+      point_infos[line][i].curvature = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
+      point_infos[line][i].label = 0;
+      point_infos[line][i].ind = i;
+      point_infos[line][i].neighbor_selected = 0;
+    }
+  }
+
+  // 从小到大排列
+  auto cmp = [] (PointInfo& lhs, PointInfo& rhs) {
+    return lhs.curvature < rhs.curvature;
+  };
+  for (int line = 0; line <= 50; ++line) {
+    uint num_line_pts = scan_pts[line].size();
+    std::sort(point_infos[line] + 5, point_infos[line] + num_line_pts - 6, cmp);
+    // 分为六个扇区
+    for (int sec = 0; sec < 6; ++sec) {
+      uint sp = 5 + (num_line_pts - 11) / 6 * sec;
+      uint ep = 5 + (num_line_pts - 11) / 6 * (sec + 1) - 1;
+      for (int i = ep; i >= sp; --i) {
+        // TODOTODO
+      }
+    }
+  }
 
 }
 
