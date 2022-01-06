@@ -23,12 +23,13 @@ struct PointInfo {
   float curvature;
   float label; // 0 未标签 1 edge 2 plane
   bool neighbor_selected; // 是否其邻居点已被选作Feature点
-  uint16_t ind; // 原本的下标
+  // uint16_t ind; // 原本的下标
 };
 
 PointInfo point_infos[64][6250];
+uint point_ind[64][6250];
 
-int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>& scan_pts) {
+int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>* scan_pts) {
   pcl::PointXYZI pt;
   int num_points = cloud_in.size();
   // atan2 (-pi, pi] 表示当前点与x轴正方向的夹角，并且从x轴逆时针的角度为正，顺时针的角度为负
@@ -41,8 +42,8 @@ int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>& scan_pts) 
   }
 
   bool half_pass = false;
-  scan_pts.clear();
-  scan_pts.resize(64);
+  scan_pts->clear();
+  scan_pts->resize(64);
   for (uint i = 0; i < cloud_in.size(); ++i) {
     pt.x = cloud_in[i].x;
     pt.y = cloud_in[i].y;
@@ -94,12 +95,15 @@ int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>& scan_pts) 
         }
     }
     pt.intensity = line + scan_period / (end_ori - start_ori) * (ori - start_ori);
-    scan_pts[line].push_back(pt);
+    scan_pts->at(line).push_back(pt);
   }
   return 0;
 }
 
-int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT* edge_feature, PointCloudT* plane_feature) {
+int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT* edge_feature,
+PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* secondary_plane_feature) {
+  edge_feature->clear();
+  plane_feature->clear();
   for (int line = 0; line <= 50; ++line) {
     const PointCloudT& line_pts = scan_pts[line];
     for (int i = 5; i < line_pts.size() - 6; ++i) {
@@ -114,30 +118,76 @@ int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT* edge_
       line_pts[i + 5].z;
       point_infos[line][i].curvature = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
       point_infos[line][i].label = 0;
-      point_infos[line][i].ind = i;
       point_infos[line][i].neighbor_selected = 0;
+      point_ind[line][i] = i;
     }
   }
 
-  // 从小到大排列
-  auto cmp = [] (PointInfo& lhs, PointInfo& rhs) {
-    return lhs.curvature < rhs.curvature;
-  };
   for (int line = 0; line <= 50; ++line) {
     uint num_line_pts = scan_pts[line].size();
-    std::sort(point_infos[line] + 5, point_infos[line] + num_line_pts - 6, cmp);
+    // 从小到大排列
+    std::sort(point_ind[line] + 5, point_ind[line] + num_line_pts - 6, [&](uint lhs, uint rhs) {
+      return point_infos[line][lhs].curvature < point_infos[line][rhs].curvature;
+    });
     // 分为六个扇区
     for (int sec = 0; sec < 6; ++sec) {
       uint sp = 5 + (num_line_pts - 11) / 6 * sec;
       uint ep = 5 + (num_line_pts - 11) / 6 * (sec + 1) - 1;
+      uint edge_feature_count = 0;
       for (int i = ep; i >= sp; --i) {
-        // TODOTODO
+        if (edge_feature_count >= 2) {
+          break;
+        }
+        if (point_infos[line][i].neighbor_selected == true) {
+          continue;
+        }
+        uint pt_ind = point_ind[line][i];
+        edge_feature->push_back(scan_pts[line][pt_ind]);
+        point_infos[line][i].label = 1;
+        for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
+          float diff_x = scan_pts[line][j].x - scan_pts[line][pt_ind].x;
+          float diff_y = scan_pts[line][j].y - scan_pts[line][pt_ind].y;
+          float diff_z = scan_pts[line][j].z - scan_pts[line][pt_ind].z;
+          // 将离当前点sqrt 0.05m内的点排除，防止特征点过于密集
+          if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z >= 0.05) {
+            continue;
+          }
+          point_infos[line][j].neighbor_selected = true;
+        }
+        ++edge_feature_count;
+        ROS_INFO_STREAM("Edge feature curvature: " << point_infos[line][pt_ind].curvature);
+      }
+
+      uint plane_feature_count = 0;
+      for (int i = sp; i <= ep; ++i) {
+        if (plane_feature_count >= 2) {
+          break;
+        }
+        if (point_infos[line][i].neighbor_selected == true) {
+          continue;
+        }
+        uint pt_ind = point_ind[line][i];
+        plane_feature->push_back(scan_pts[line][pt_ind]);
+        for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
+          float diff_x = scan_pts[line][j].x - scan_pts[line][pt_ind].x;
+          float diff_y = scan_pts[line][j].y - scan_pts[line][pt_ind].y;
+          float diff_z = scan_pts[line][j].z - scan_pts[line][pt_ind].z;
+          // 将离当前点sqrt 0.05m内的点排除，防止特征点过于密集
+          if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z >= 0.05) {
+            continue;
+          }
+          point_infos[line][j].neighbor_selected = true;
+        }
+        point_infos[line][i].label = 2;
+        ++plane_feature_count;
+        // TODO(caoming): 从对ALOAM代码的输出中可以看出edge 的curvature比较大，Plane的curvarture都是在10-4数量级的。检查一下。
+        ROS_INFO_STREAM("Plane feature curvature: " << point_infos[line][pt_ind].curvature);
       }
     }
   }
-
 }
 
+ros::Publisher edge_feature_pub, plane_feature_pub, secondary_edge_feature_pub;
 void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   PointCloudT pc_pcl;
   pcl::fromROSMsg(*pc_msg, pc_pcl);
@@ -146,7 +196,19 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   pcl::removeNaNFromPointCloud(pc_pcl, pc_pcl, indices);
   
   std::vector<PointCloudT> scan_pts;
-  splitScans(pc_pcl, scan_pts);
+  splitScans(pc_pcl, &scan_pts);
+
+  PointCloudT edge_feature_pc, secondary_edge_feature_pc, plane_feature_pc, secondary_plane_feature_pc;
+  extractFeatures(scan_pts, &edge_feature_pc, &secondary_edge_feature_pc, &plane_feature_pc, &secondary_plane_feature_pc);
+
+  sensor_msgs::PointCloud2 edge_feature_msg, plane_feature_msg;
+  pcl::toROSMsg(edge_feature_pc, edge_feature_msg);
+  pcl::toROSMsg(plane_feature_pc, plane_feature_msg);
+  edge_feature_msg.header = pc_msg->header;
+  plane_feature_msg.header = pc_msg->header;
+
+  edge_feature_pub.publish(edge_feature_msg);
+  plane_feature_pub.publish(plane_feature_msg);
 }
 
 int main(int argc, char *argv[])
@@ -155,6 +217,8 @@ int main(int argc, char *argv[])
   ros::init(argc, argv, "lidar_odometry");
   ros::NodeHandle nh;
   ros::Subscriber velo_sub = nh.subscribe(lidar_topic, 1, lidarCB);
+  edge_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("edge_feature", 1);
+  plane_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("plane_feature", 1);
   ros::spin();
   return 0;
 }
