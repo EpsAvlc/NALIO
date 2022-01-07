@@ -106,7 +106,7 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
   plane_feature->clear();
   for (int line = 0; line <= 50; ++line) {
     const PointCloudT& line_pts = scan_pts[line];
-    for (int i = 5; i < line_pts.size() - 6; ++i) {
+    for (int i = 5; i <= line_pts.size() - 6; ++i) {
       float diff_x = line_pts[i - 5].x + line_pts[i - 4].x + line_pts[i - 3].x + line_pts[i - 2].x + line_pts[i - 1].x
       - 10 * line_pts[i].x + line_pts[i + 1].x + line_pts[i + 2].x + line_pts[i + 3].x + line_pts[i + 4].x +
       line_pts[i + 5].x;
@@ -125,14 +125,17 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
 
   for (int line = 0; line <= 50; ++line) {
     uint num_line_pts = scan_pts[line].size();
-    // 从小到大排列
-    std::sort(point_ind[line] + 5, point_ind[line] + num_line_pts - 6, [&](uint lhs, uint rhs) {
-      return point_infos[line][lhs].curvature < point_infos[line][rhs].curvature;
-    });
+  
     // 分为六个扇区
     for (int sec = 0; sec < 6; ++sec) {
-      uint sp = 5 + (num_line_pts - 11) / 6 * sec;
-      uint ep = 5 + (num_line_pts - 11) / 6 * (sec + 1) - 1;
+      uint sp = 5 + (num_line_pts - 10) / 6 * sec;
+      uint ep = 5 + (num_line_pts - 10) / 6 * (sec + 1) - 1;
+      // 从小到大排列
+      std::sort(point_ind[line] + sp, point_ind[line] + ep + 1, [&](uint lhs, uint rhs) {
+        return point_infos[line][lhs].curvature < point_infos[line][rhs].curvature;
+      });     
+      // ROS_INFO("-------------------------------");
+      // ROS_INFO_STREAM("Max curvature: " << point_infos[line][point_ind[line][ep]].curvature << ", Min curvature: " << point_infos[line][point_ind[line][sp]].curvature);
       uint edge_feature_count = 0;
       for (int i = ep; i >= sp; --i) {
         if (edge_feature_count >= 2) {
@@ -155,12 +158,12 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
           point_infos[line][j].neighbor_selected = true;
         }
         ++edge_feature_count;
-        ROS_INFO_STREAM("Edge feature curvature: " << point_infos[line][pt_ind].curvature);
+        // ROS_INFO_STREAM("Edge feature curvature: " << point_infos[line][pt_ind].curvature);
       }
 
       uint plane_feature_count = 0;
       for (int i = sp; i <= ep; ++i) {
-        if (plane_feature_count >= 2) {
+        if (plane_feature_count >= 4) {
           break;
         }
         if (point_infos[line][i].neighbor_selected == true) {
@@ -181,7 +184,7 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
         point_infos[line][i].label = 2;
         ++plane_feature_count;
         // TODO(caoming): 从对ALOAM代码的输出中可以看出edge 的curvature比较大，Plane的curvarture都是在10-4数量级的。检查一下。
-        ROS_INFO_STREAM("Plane feature curvature: " << point_infos[line][pt_ind].curvature);
+        // ROS_INFO_STREAM("Plane feature curvature: " << point_infos[line][pt_ind].curvature);
       }
     }
   }
