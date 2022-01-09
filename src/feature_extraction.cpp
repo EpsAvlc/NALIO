@@ -214,10 +214,8 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   plane_feature_pub.publish(plane_feature_msg);
 }
 
-int main(int argc, char *argv[])
-{
-  /* code */
-  ros::init(argc, argv, "lidar_odometry");
+int main(int argc, char *argv[]) {
+  ros::init(argc, argv, "feature_extraction");
   ros::NodeHandle nh;
   ros::Subscriber velo_sub = nh.subscribe(lidar_topic, 1, lidarCB);
   edge_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("edge_feature", 1);
