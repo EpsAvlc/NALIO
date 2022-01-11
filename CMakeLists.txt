@@ -48,5 +48,14 @@ target_link_libraries(feature_extraction
 	${PCL_LIBRARIES}
 )
 
+add_executable(lidar_odometry
+  src/lidar_odometry.cpp
+)
+
+target_link_libraries(lidar_odometry
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
 add_executable(kittiHelper src/kittiHelper.cpp)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})

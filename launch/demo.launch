@@ -1,4 +1,5 @@
 <launch>
     <node name="feature_extraction" pkg="nalio" type="feature_extraction" output="screen"/> 
+    <node name="lidar_odometry" pkg="nalio" type="lidar_odometry" output="screen"/> 
     <node pkg="rviz" type="rviz" name="rviz_nalio" args="-d $(find nalio)/rviz/demo.rviz"/>
 </launch>
