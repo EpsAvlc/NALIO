@@ -14,6 +14,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
 
 std::list<sensor_msgs::PointCloud2ConstPtr> edge_feature_msg_list, plane_feature_msg_list;
 std::mutex edge_feature_mutex, plane_feature_mutex;
@@ -37,6 +38,7 @@ int main(int argc, char** argv) {
   ros::Subscriber plane_feature_sub = nh.subscribe<sensor_msgs::PointCloud2>("plane_feature", 1, PlaneFeatureCB);
 
   ros::Rate rate(20);
+  pcl::KdTreeFLANN<pcl::PointXYZI> kdtree_edge, kdtree_plane;
   while (ros::ok()) {
     ros::spinOnce();
     if (!edge_feature_msg_list.empty() && !plane_feature_msg_list.empty()) {
