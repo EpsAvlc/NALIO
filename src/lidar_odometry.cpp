@@ -20,6 +20,7 @@ std::list<sensor_msgs::PointCloud2ConstPtr> edge_feature_msg_list, plane_feature
 std::mutex edge_feature_mutex, plane_feature_mutex;
 
 using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
+using PointT = pcl::PointXYZI;
 
 void EdgeFeatureCB(const sensor_msgs::PointCloud2ConstPtr& edge_feature_msg) {
   std::lock_guard<std::mutex> lock(edge_feature_mutex);
@@ -29,6 +30,10 @@ void EdgeFeatureCB(const sensor_msgs::PointCloud2ConstPtr& edge_feature_msg) {
 void PlaneFeatureCB(const sensor_msgs::PointCloud2ConstPtr& plane_feature_msg) {
   std::lock_guard<std::mutex> lock(plane_feature_mutex);
   plane_feature_msg_list.push_back(plane_feature_msg);
+}
+
+void UndistortPointCloud(PointT const *const pi, PointT * const po) {
+
 }
 
 int main(int argc, char** argv) {

@@ -183,14 +183,16 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
         }
         point_infos[line][i].label = 2;
         ++plane_feature_count;
-        // TODO(caoming): 从对ALOAM代码的输出中可以看出edge 的curvature比较大，Plane的curvarture都是在10-4数量级的。检查一下。
-        // ROS_INFO_STREAM("Plane feature curvature: " << point_infos[line][pt_ind].curvature);
       }
     }
   }
 }
 
-ros::Publisher edge_feature_pub, plane_feature_pub, secondary_edge_feature_pub;
+ros::Publisher edge_feature_pub, // 每个片区选2个
+               weak_edge_feature_pub, // 每个片区选20个
+               plane_feature_pub,  // 每个片区选4个
+               weak_plane_feature_pub; // 无上限
+
 void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   PointCloudT pc_pcl;
   pcl::fromROSMsg(*pc_msg, pc_pcl);
@@ -219,7 +221,9 @@ int main(int argc, char *argv[]) {
   ros::NodeHandle nh;
   ros::Subscriber velo_sub = nh.subscribe(lidar_topic, 1, lidarCB);
   edge_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("edge_feature", 1);
+  weak_edge_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("weak_edge_feature", 1);
   plane_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("plane_feature", 1);
+  weak_plane_feature_pub = nh.advertise<sensor_msgs::PointCloud2>("weak_plane_feature", 1);
   ros::spin();
   return 0;
 }
