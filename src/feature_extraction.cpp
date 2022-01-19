@@ -21,7 +21,7 @@ using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
 
 struct PointInfo {
   float curvature;
-  float label; // 0 未标签 1 edge 2 plane
+  float label; // 0 未标签 1 edge -1 plane
   bool neighbor_selected; // 是否其邻居点已被选作Feature点
   // uint16_t ind; // 原本的下标
 };
@@ -101,9 +101,11 @@ int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>* scan_pts) 
 }
 
 int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT* edge_feature,
-PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* secondary_plane_feature) {
+PointCloudT* weak_edge_feature, PointCloudT* plane_feature, PointCloudT* weak_plane_feature) {
   edge_feature->clear();
+  weak_edge_feature->clear();
   plane_feature->clear();
+  weak_plane_feature->clear();
   for (int line = 0; line <= 50; ++line) {
     const PointCloudT& line_pts = scan_pts[line];
     for (int i = 5; i <= line_pts.size() - 6; ++i) {
@@ -138,15 +140,19 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
       // ROS_INFO_STREAM("Max curvature: " << point_infos[line][point_ind[line][ep]].curvature << ", Min curvature: " << point_infos[line][point_ind[line][sp]].curvature);
       uint edge_feature_count = 0;
       for (int i = ep; i >= sp; --i) {
-        if (edge_feature_count >= 2) {
+        if (edge_feature_count >= 20) {
           break;
         }
-        if (point_infos[line][i].neighbor_selected == true) {
+        uint pt_ind = point_ind[line][i];
+        if (point_infos[line][pt_ind].neighbor_selected == true) {
           continue;
         }
-        uint pt_ind = point_ind[line][i];
-        edge_feature->push_back(scan_pts[line][pt_ind]);
-        point_infos[line][i].label = 1;
+        if (edge_feature_count <= 2) {
+          edge_feature->push_back(scan_pts[line][pt_ind]);
+        }
+        weak_edge_feature->push_back(scan_pts[line][pt_ind]);
+        
+        point_infos[line][pt_ind].label = 1;
         for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
           float diff_x = scan_pts[line][j].x - scan_pts[line][pt_ind].x;
           float diff_y = scan_pts[line][j].y - scan_pts[line][pt_ind].y;
@@ -166,10 +172,10 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
         if (plane_feature_count >= 4) {
           break;
         }
-        if (point_infos[line][i].neighbor_selected == true) {
+        uint pt_ind = point_ind[line][i];
+        if (point_infos[line][pt_ind].neighbor_selected == true) {
           continue;
         }
-        uint pt_ind = point_ind[line][i];
         plane_feature->push_back(scan_pts[line][pt_ind]);
         for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
           float diff_x = scan_pts[line][j].x - scan_pts[line][pt_ind].x;
@@ -181,8 +187,15 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
           }
           point_infos[line][j].neighbor_selected = true;
         }
-        point_infos[line][i].label = 2;
+        point_infos[line][i].label = -1;
         ++plane_feature_count;
+      }
+
+      for (int i = sp; i <= ep; ++i) {
+        uint pt_ind = point_ind[line][i];
+        if (point_infos[line][pt_ind].label <= 0) {
+          weak_plane_feature->push_back(scan_pts[line][pt_ind]);
+        }
       }
     }
   }
@@ -191,7 +204,7 @@ PointCloudT* secondary_edge_feature, PointCloudT* plane_feature, PointCloudT* se
 ros::Publisher edge_feature_pub, // 每个片区选2个
                weak_edge_feature_pub, // 每个片区选20个
                plane_feature_pub,  // 每个片区选4个
-               weak_plane_feature_pub; // 无上限
+               weak_plane_feature_pub; // 所有的非corner点均为此类点
 
 void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   PointCloudT pc_pcl;
@@ -203,17 +216,23 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   std::vector<PointCloudT> scan_pts;
   splitScans(pc_pcl, &scan_pts);
 
-  PointCloudT edge_feature_pc, secondary_edge_feature_pc, plane_feature_pc, secondary_plane_feature_pc;
-  extractFeatures(scan_pts, &edge_feature_pc, &secondary_edge_feature_pc, &plane_feature_pc, &secondary_plane_feature_pc);
+  PointCloudT edge_feature_pc, weak_edge_feature_pc, plane_feature_pc, weak_plane_feature_pc;
+  extractFeatures(scan_pts, &edge_feature_pc, &weak_edge_feature_pc, &plane_feature_pc, &weak_plane_feature_pc);
 
-  sensor_msgs::PointCloud2 edge_feature_msg, plane_feature_msg;
+  sensor_msgs::PointCloud2 edge_feature_msg, plane_feature_msg, weak_edge_feature_msg, weak_plane_feature_msg;
   pcl::toROSMsg(edge_feature_pc, edge_feature_msg);
+  pcl::toROSMsg(weak_edge_feature_pc, weak_edge_feature_msg);
   pcl::toROSMsg(plane_feature_pc, plane_feature_msg);
+  pcl::toROSMsg(weak_plane_feature_pc, weak_plane_feature_msg);
   edge_feature_msg.header = pc_msg->header;
+  weak_edge_feature_msg.header = pc_msg->header;
   plane_feature_msg.header = pc_msg->header;
+  weak_plane_feature_msg.header = pc_msg->header;
 
   edge_feature_pub.publish(edge_feature_msg);
+  weak_edge_feature_pub.publish(weak_edge_feature_msg);
   plane_feature_pub.publish(plane_feature_msg);
+  weak_plane_feature_pub.publish(weak_plane_feature_msg);
 }
 
 int main(int argc, char *argv[]) {
