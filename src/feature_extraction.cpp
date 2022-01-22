@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <pcl/point_types.h>
 #include <pcl/filters/filter.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <ros/ros.h>
@@ -18,6 +19,7 @@ const std::string lidar_topic = "/velodyne_points";
 const double scan_period = 0.1;
 
 using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
+using PointT = pcl::PointXYZI;
 
 struct PointInfo {
   float curvature;
@@ -100,8 +102,8 @@ int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>* scan_pts) 
   return 0;
 }
 
-int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT* edge_feature,
-PointCloudT* weak_edge_feature, PointCloudT* plane_feature, PointCloudT* weak_plane_feature) {
+int extractFeatures(const std::vector<PointCloudT>& scan_pts, PointCloudT::Ptr& edge_feature,
+PointCloudT::Ptr& weak_edge_feature, PointCloudT::Ptr& plane_feature, PointCloudT::Ptr& weak_plane_feature) {
   edge_feature->clear();
   weak_edge_feature->clear();
   plane_feature->clear();
@@ -199,6 +201,12 @@ PointCloudT* weak_edge_feature, PointCloudT* plane_feature, PointCloudT* weak_pl
       }
     }
   }
+
+  
+  pcl::VoxelGrid<PointT> ds_filter;
+  ds_filter.setInputCloud(weak_plane_feature);
+  ds_filter.setLeafSize(0.2, 0.2, 0.2);
+  ds_filter.filter(*weak_plane_feature);
 }
 
 ros::Publisher edge_feature_pub, // 每个片区选2个
@@ -216,14 +224,17 @@ void lidarCB(const sensor_msgs::PointCloud2ConstPtr pc_msg) {
   std::vector<PointCloudT> scan_pts;
   splitScans(pc_pcl, &scan_pts);
 
-  PointCloudT edge_feature_pc, weak_edge_feature_pc, plane_feature_pc, weak_plane_feature_pc;
-  extractFeatures(scan_pts, &edge_feature_pc, &weak_edge_feature_pc, &plane_feature_pc, &weak_plane_feature_pc);
+  PointCloudT::Ptr edge_feature_pc(new PointCloudT),
+                   weak_edge_feature_pc(new PointCloudT),
+                   plane_feature_pc(new PointCloudT),
+                   weak_plane_feature_pc(new PointCloudT);
+  extractFeatures(scan_pts, edge_feature_pc, weak_edge_feature_pc, plane_feature_pc, weak_plane_feature_pc);
 
   sensor_msgs::PointCloud2 edge_feature_msg, plane_feature_msg, weak_edge_feature_msg, weak_plane_feature_msg;
-  pcl::toROSMsg(edge_feature_pc, edge_feature_msg);
-  pcl::toROSMsg(weak_edge_feature_pc, weak_edge_feature_msg);
-  pcl::toROSMsg(plane_feature_pc, plane_feature_msg);
-  pcl::toROSMsg(weak_plane_feature_pc, weak_plane_feature_msg);
+  pcl::toROSMsg(*edge_feature_pc, edge_feature_msg);
+  pcl::toROSMsg(*weak_edge_feature_pc, weak_edge_feature_msg);
+  pcl::toROSMsg(*plane_feature_pc, plane_feature_msg);
+  pcl::toROSMsg(*weak_plane_feature_pc, weak_plane_feature_msg);
   edge_feature_msg.header = pc_msg->header;
   weak_edge_feature_msg.header = pc_msg->header;
   plane_feature_msg.header = pc_msg->header;

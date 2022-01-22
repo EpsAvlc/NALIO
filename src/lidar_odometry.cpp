@@ -16,8 +16,8 @@
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
 
-std::list<sensor_msgs::PointCloud2ConstPtr> edge_feature_msg_list, plane_feature_msg_list;
-std::mutex edge_feature_mutex, plane_feature_mutex;
+std::list<sensor_msgs::PointCloud2ConstPtr> edge_feature_msg_list, weak_edge_feature_msg_list, plane_feature_msg_list, weak_plane_feature_msg_list;
+std::mutex edge_feature_mutex, weak_edge_feature_mutex, plane_feature_mutex, weak_plane_feature_mutex;
 
 using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
 using PointT = pcl::PointXYZI;
@@ -27,9 +27,19 @@ void EdgeFeatureCB(const sensor_msgs::PointCloud2ConstPtr& edge_feature_msg) {
   edge_feature_msg_list.push_back(edge_feature_msg);
 }
 
+void WeakEdgeFeatureCB(const sensor_msgs::PointCloud2ConstPtr& weak_edge_feature_msg) {
+  std::lock_guard<std::mutex> lock(weak_edge_feature_mutex);
+  weak_edge_feature_msg_list.push_back(weak_edge_feature_msg);
+}
+
 void PlaneFeatureCB(const sensor_msgs::PointCloud2ConstPtr& plane_feature_msg) {
   std::lock_guard<std::mutex> lock(plane_feature_mutex);
   plane_feature_msg_list.push_back(plane_feature_msg);
+}
+
+void WeakPlaneFeatureCB(const sensor_msgs::PointCloud2ConstPtr& weak_plane_feature_msg) {
+  std::lock_guard<std::mutex> lock(weak_plane_feature_mutex);
+  weak_plane_feature_msg_list.push_back(weak_plane_feature_msg);
 }
 
 void UndistortPointCloud(PointT const *const pi, PointT * const po) {
@@ -40,22 +50,45 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "lidar_odometry");
   ros::NodeHandle nh;
   ros::Subscriber edge_feature_sub = nh.subscribe<sensor_msgs::PointCloud2>("edge_feature", 1, EdgeFeatureCB);
-  ros::Subscriber plane_feature_sub = nh.subscribe<sensor_msgs::PointCloud2>("plane_feature", 1, PlaneFeatureCB);
+  ros::Subscriber weak_edge_feature_sub = nh.subscribe<sensor_msgs::PointCloud2>("weak_edge_feature", 1, WeakEdgeFeatureCB);
+  ros::Subscriber weak_plane_feature_sub = nh.subscribe<sensor_msgs::PointCloud2>("weak_plane_feature", 1, PlaneFeatureCB);
+  ros::Subscriber plane_feature_sub = nh.subscribe<sensor_msgs::PointCloud2>("plane_feature", 1, WeakPlaneFeatureCB);
 
   ros::Rate rate(20);
   pcl::KdTreeFLANN<pcl::PointXYZI> kdtree_edge, kdtree_plane;
   while (ros::ok()) {
     ros::spinOnce();
-    if (!edge_feature_msg_list.empty() && !plane_feature_msg_list.empty()) {
-      if (edge_feature_msg_list.front()->header.stamp != plane_feature_msg_list.front()->header.stamp) {
+    if (!edge_feature_msg_list.empty() && !weak_edge_feature_msg_list.empty()
+         && !plane_feature_msg_list.empty() && !weak_plane_feature_msg_list.empty()) {
+      if (edge_feature_msg_list.front()->header.stamp != plane_feature_msg_list.front()->header.stamp ||
+          edge_feature_msg_list.front()->header.stamp != weak_edge_feature_msg_list.front()->header.stamp ||
+          weak_edge_feature_msg_list.front()->header.stamp != weak_plane_feature_msg_list.front()->header.stamp ||
+          plane_feature_msg_list.front()->header.stamp != weak_plane_feature_msg_list.front()->header.stamp) {
         ROS_ERROR_STREAM("Unsync msg");
         ros::shutdown();
       } else {
-        PointCloudT edge_feature_pc, plane_feature_pc;
+        PointCloudT edge_feature_pc, weak_edge_feature_pc, plane_feature_pc, weak_plane_feature_pc;
         pcl::fromROSMsg(*edge_feature_msg_list.front(), edge_feature_pc);
+        pcl::fromROSMsg(*weak_edge_feature_msg_list.front(), weak_edge_feature_pc);
         pcl::fromROSMsg(*plane_feature_msg_list.front(), plane_feature_pc);
-        edge_feature_msg_list.pop_front();
-        plane_feature_msg_list.pop_front();
+        pcl::fromROSMsg(*weak_plane_feature_msg_list.front(), weak_plane_feature_pc);
+
+        {
+          std::lock_guard<std::mutex> lock(edge_feature_mutex);
+          edge_feature_msg_list.pop_front();
+        }
+        {
+          std::lock_guard<std::mutex> lock(weak_edge_feature_mutex);
+          weak_edge_feature_msg_list.pop_front();
+        }
+        {
+          std::lock_guard<std::mutex> lock(plane_feature_mutex);
+          plane_feature_msg_list.pop_front();
+        }
+        {
+          std::lock_guard<std::mutex> lock(weak_plane_feature_mutex);
+          weak_plane_feature_msg_list.pop_front();
+        }
       }
     }
     rate.sleep();
