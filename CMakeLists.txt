@@ -32,17 +32,31 @@ catkin_package(
 )
 
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 	${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
+######################## LIBS ####################
+add_library(${PROJECT_NAME}_feature
+  src/feature/loam_feature_extractor.cc
+)
+target_link_libraries(${PROJECT_NAME}_feature
+	${PCL_LIBRARIES}
+)
+
+add_library(${PROJECT_NAME}_utils
+  src/utils/log_utils.cc
+)
+target_link_libraries(${PROJECT_NAME}_utils
+  ${catkin_LIBRARIES}
+)
+
+
 add_executable(feature_extraction
   src/feature_extraction.cpp
 )
-
 target_link_libraries(feature_extraction
   ${catkin_LIBRARIES}
 	${PCL_LIBRARIES}

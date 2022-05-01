@@ -15,6 +15,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <ros/ros.h>
 
+#include "nalio/feature/loam_feature_extractor.hh"
+
 const std::string lidar_topic = "/velodyne_points";
 const double scan_period = 0.1;
 
@@ -96,6 +98,7 @@ int splitScans(const PointCloudT& cloud_in, std::vector<PointCloudT>* scan_pts) 
             ori -= 2 * M_PI;
         }
     }
+    // 给每个点的intensity设置为这个点的时刻的ratio。
     pt.intensity = line + scan_period / (end_ori - start_ori) * (ori - start_ori);
     scan_pts->at(line).push_back(pt);
   }
@@ -120,6 +123,7 @@ PointCloudT::Ptr& weak_edge_feature, PointCloudT::Ptr& plane_feature, PointCloud
       float diff_z = line_pts[i - 5].z + line_pts[i - 4].z + line_pts[i - 3].z + line_pts[i - 2].z + line_pts[i - 1].z
       - 10 * line_pts[i].z + line_pts[i + 1].z + line_pts[i + 2].z + line_pts[i + 3].z + line_pts[i + 4].z +
       line_pts[i + 5].z;
+      // 为每个点设置曲率。
       point_infos[line][i].curvature = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
       point_infos[line][i].label = 0;
       point_infos[line][i].neighbor_selected = 0;
