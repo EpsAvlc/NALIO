@@ -67,7 +67,6 @@ target_link_libraries(${PROJECT_NAME}_feature
 	${PCL_LIBRARIES}
 )
 ####################### Nodes ####################
-
 add_executable(${Project_name}_pipeline
   src/nalio_pipeline.cc
 )
@@ -92,6 +91,17 @@ target_link_libraries(${Project_name}_pipeline
 #   ${catkin_LIBRARIES}
 #   ${PCL_LIBRARIES}
 # )
+
+####################### Tests ####################
+if(CATKIN_ENABLE_TESTING)
+catkin_add_gtest(${PROJECT_NAME}_test
+  tests/tests.cc
+)
+target_link_libraries(${PROJECT_NAME}_test
+  ${PROJECT_NAME}_state
+  ${catkin_LIBRARIES}
+)
+endif()
 
 add_executable(kittiHelper src/kittiHelper.cpp)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})

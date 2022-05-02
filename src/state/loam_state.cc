@@ -1,6 +1,7 @@
 #include "nalio/state/loam_state.hh"
 
 #include <Eigen/Geometry>
+#include <iostream>
 namespace nalio {
 
 void LOAMState::oplus(const InputT& input) {
@@ -17,7 +18,8 @@ void LOAMState::oplus(const InputT& input) {
 
 void LOAMState::reset() {
   state_.setZero();
-  state_(4) = 0;
+  // 在 eigen中，四元数的顺序为x, y, z, w
+  state_(6) = 1;
 }
 
 };
