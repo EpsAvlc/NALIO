@@ -21,6 +21,7 @@ struct LOAMFeature : public Feature<pcl::PointXYZI> {
 class LOAMFeatureExtractor
     : public FeatureExtractor<pcl::PointXYZI, pcl::PointXYZI> {
  public:
+  using FeatureT = LOAMFeature;
   using PointCloudT = pcl::PointCloud<pcl::PointXYZI>;
   int extract(const pcl::PointCloud<pcl::PointXYZI> cloud_in,
               std::vector<Feature<pcl::PointXYZI>::Ptr>* features);

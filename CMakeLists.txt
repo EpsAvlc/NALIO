@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION 3.0.2)
 project(nalio)
 
 add_compile_options(-std=c++11)
-set(CMAKE_BUILD_TYPE "DEBUG")
+set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 # -g 包含调试信息 
 # -Wall 启动所有的 warning
 # -O3 三级优化 最高的优化选项
-# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
@@ -36,9 +36,16 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 	${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  /usr/include/eigen3
 )
 
 ######################## LIBS ####################
+add_library(${PROJECT_NAME}_state
+  src/state/loam_state.cc
+)
+target_link_libraries(${PROJECT_NAME}_state
+)
+
 add_library(${PROJECT_NAME}_feature
   src/feature/loam_feature_extractor.cc
 )
@@ -53,23 +60,38 @@ target_link_libraries(${PROJECT_NAME}_utils
   ${catkin_LIBRARIES}
 )
 
-
-add_executable(feature_extraction
-  src/feature_extraction.cpp
+add_library(${PROJECT_NAME}_system
+  src/system/loam_system.cc
 )
-target_link_libraries(feature_extraction
-  ${catkin_LIBRARIES}
+target_link_libraries(${PROJECT_NAME}_feature
 	${PCL_LIBRARIES}
 )
+####################### Nodes ####################
 
-add_executable(lidar_odometry
-  src/lidar_odometry.cpp
+add_executable(${Project_name}_pipeline
+  src/nalio_pipeline.cc
+)
+target_link_libraries(${Project_name}_pipeline
+  ${PROJECT_NAME}_feature
+  ${PROJECT_NAME}_utils
 )
 
-target_link_libraries(lidar_odometry
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-)
+# add_executable(feature_extraction
+#   src/feature_extraction.cpp
+# )
+# target_link_libraries(feature_extraction
+#   ${catkin_LIBRARIES}
+# 	${PCL_LIBRARIES}
+# )
+
+# add_executable(lidar_odometry
+#   src/lidar_odometry.cpp
+# )
+
+# target_link_libraries(lidar_odometry
+#   ${catkin_LIBRARIES}
+#   ${PCL_LIBRARIES}
+# )
 
 add_executable(kittiHelper src/kittiHelper.cpp)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
