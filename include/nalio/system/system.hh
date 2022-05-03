@@ -1,18 +1,20 @@
 #ifndef NALIO_SYSTEM_SYSTEM_HH__
 #define NALIO_SYSTEM_SYSTEM_HH__
 
+#include <memory>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
 namespace nalio {
-class system {
+class System {
  public:
-  virtual void init() = 0;
-  virtual void stop() = 0;
+  using Ptr = std::unique_ptr<System>;
+  virtual void init() {};
+  virtual void stop() {};
 
  protected:
-  virtual void propagate() = 0;
-  virtual void update() = 0;
+  virtual void propagate() {};
+  virtual void update() {};
   virtual Eigen::Isometry3d getEstimated();
 
 

@@ -14,12 +14,20 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   roscpp
   rospy
+  rosunit
+  rostest
   rosbag
   std_msgs
   image_transport
   cv_bridge
   tf
 )
+
+# see here: https://github.com/PointCloudLibrary/pcl/issues/3680
+# when this is fixed, we can remove the following 3 lines.
+if(NOT DEFINED CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
+     set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
+endif()
 
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -73,6 +81,7 @@ add_executable(${Project_name}_pipeline
 target_link_libraries(${Project_name}_pipeline
   ${PROJECT_NAME}_feature
   ${PROJECT_NAME}_utils
+  ${PROJECT_NAME}_system
 )
 
 # add_executable(feature_extraction
@@ -100,6 +109,7 @@ catkin_add_gtest(${PROJECT_NAME}_test
 target_link_libraries(${PROJECT_NAME}_test
   ${PROJECT_NAME}_state
   ${catkin_LIBRARIES}
+  gtest_main
 )
 endif()
 

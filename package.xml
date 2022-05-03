@@ -2,7 +2,7 @@
 <package format="2">
   <name>nalio</name>
   <version>0.0.0</version>
-  <description>NAive Lidar Odometry</description>
+  <description>NAive Lidar Inertial Odometry</description>
   <maintainer email="cm9999@qq.com">epsavlc</maintainer>
   <license>MIT</license>
 
