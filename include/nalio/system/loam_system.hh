@@ -18,6 +18,7 @@ class LOAMSystem final : public System {
   virtual void update() override;
   virtual Eigen::Isometry3d getEstimated();
 
+
   LOAMState state_;
 };
 

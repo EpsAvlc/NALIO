@@ -3,9 +3,8 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
-
-#include "nalio/system/system.hh"
 
 namespace nalio {
 template <typename Base>
