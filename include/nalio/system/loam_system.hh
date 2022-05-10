@@ -10,15 +10,17 @@ namespace nalio {
 class LOAMSystem final : public System {
  public:
   using Ptr = std::unique_ptr<LOAMSystem>;
-  virtual void init() override;
-  virtual void stop() override;
+  void init() override;
+  void stop() override;
+  void feedData(const DataPackage& data);
+  
 
  private:
-  virtual void propagate() override;
-  virtual void update() override;
-  virtual Eigen::Isometry3d getEstimated();
+  void propagate() override;
+  void update() override;
+  Eigen::Isometry3d getEstimated() override;
 
-
+  LOAMFeatureExtractor feature_extractor_;
   LOAMState state_;
 };
 

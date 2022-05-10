@@ -15,23 +15,20 @@ struct NalioPoint {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW  // make sure our new allocators are aligned
 } EIGEN_ALIGN16;  // enforce SSE padding for correct memory alignment
 
-POINT_CLOUD_REGISTER_POINT_STRUCT(
-    NalioPoint,     
-    (float, x, x)
-    (float, y, y)
-    (float, z, z)
-    (float, intensity, intensity)
-    (float, rel_time, rel_time)
-)
+POINT_CLOUD_REGISTER_POINT_STRUCT(NalioPoint,
+                                  (float, x, x)(float, y, y)(float, z, z)(
+                                      float, intensity,
+                                      intensity)(float, rel_time, rel_time))
 
 namespace nalio {
 struct IMUData {};
 
-struct Data {
-  pcl::PointCloud<NalioPoint> lidar_meas;
+struct DataPackage {
+  using Ptr = std::shared_ptr<DataPackage>;
+  using PointCloudT = pcl::PointCloud<NalioPoint>;
+  PointCloudT lidar_meas;
   std::vector<IMUData> imu_meas;
 };
-
 
 }  // namespace nalio
 

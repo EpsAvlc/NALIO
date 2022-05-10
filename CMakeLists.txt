@@ -74,6 +74,8 @@ add_library(${PROJECT_NAME}_system
 target_link_libraries(${PROJECT_NAME}_feature
 	${PCL_LIBRARIES}
 )
+
+# add_library((${PROJECT_NAME}_dataset)
 ####################### Nodes ####################
 add_executable(${Project_name}_pipeline
   src/nalio_pipeline.cc

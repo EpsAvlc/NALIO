@@ -12,7 +12,7 @@ class System {
  public:
   using Ptr = std::unique_ptr<System>;
   virtual void init(){};
-  virtual void feedData(const Data& data){};
+  virtual void feedData(const DataPackage& data){};
   virtual void stop(){};
 
  protected:

@@ -1,14 +1,30 @@
 #ifndef NALIO_DATA_KITTI_DATASET_HH__
 #define NALIO_DATA_KITTI_DATASET_HH__
 
+#include <list>
+#include <mutex>
+
+#include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
+
 #include "nalio/data/dataset.hh"
 #include "nalio/factory/factory.hh"
+
 
 namespace nalio {
 class KITTIDataset : public Dataset {
  public:
-  KITTIDataset() : imu_topic_("/imu"), lidar_topic_("/velodyne_points") {}
-  void init() override;
+  KITTIDataset() {}
+  bool init(bool online) override;
+  bool getDataPackage(DataPackage* data) override;
+ private:
+  void lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg);
+
+  mutable std::mutex lidar_msg_list_mutex_;
+
+  ros::NodeHandle nh_;
+  ros::Subscriber lidar_sub_;
+  std::list<const sensor_msgs::PointCloud2ConstPtr> lidar_msg_list_;
 };
 
 REGISTER_NALIO(Dataset, KITTIDataset, "LOAMSystem")

@@ -11,6 +11,8 @@ int main(int argc, char* argv[]) {
   
   nalio::System::Ptr system_ptr = nalio::factory<nalio::System>::produce_unique("LOAMSystem");
   nalio::Dataset::Ptr dataset_ptr = nalio::factory<nalio::Dataset>::produce_shared("KITTIDataset");
+  
+  // while ()
 
   // system_ptr.reset()  
 
