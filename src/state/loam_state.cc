@@ -16,6 +16,7 @@ void LOAMState::oplus(const InputT& input) {
   state_.tail<4>() = q.coeffs();
 }
 
+
 void LOAMState::reset() {
   state_.setZero();
   // 在 eigen中，四元数的顺序为x, y, z, w

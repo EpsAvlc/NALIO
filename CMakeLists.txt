@@ -68,12 +68,21 @@ target_link_libraries(${PROJECT_NAME}_utils
   ${catkin_LIBRARIES}
 )
 
+add_library(${PROJECT_NAME}_propagator
+  src/propagator/linear_propagator.cc
+)
+target_link_libraries(${PROJECT_NAME}_propagator
+  ${PROJECT_NAME}_utils
+)
+
 add_library(${PROJECT_NAME}_system
   src/system/loam_system.cc
 )
 target_link_libraries(${PROJECT_NAME}_feature
 	${PCL_LIBRARIES}
+  ${PROJECT_NAME}_propagator
 )
+
 
 # add_library((${PROJECT_NAME}_dataset)
 ####################### Nodes ####################
@@ -110,6 +119,7 @@ catkin_add_gtest(${PROJECT_NAME}_test
 )
 target_link_libraries(${PROJECT_NAME}_test
   ${PROJECT_NAME}_state
+  ${PROJECT_NAME}_propagator
   ${catkin_LIBRARIES}
   gtest_main
 )

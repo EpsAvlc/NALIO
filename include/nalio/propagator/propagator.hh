@@ -5,9 +5,11 @@
 #include <Eigen/Geometry>
 
 namespace nalio {
+template <typename InputT, typename OutputT>
 class Propagator {
  public:
-  virtual Eigen::Isometry3d propagate() {};
+  virtual OutputT propagate() { return OutputT(); };
+  virtual bool update(const InputT& input) { return true;};
 };
 }  // namespace nalio
 

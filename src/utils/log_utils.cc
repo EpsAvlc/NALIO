@@ -1,5 +1,6 @@
 #include "nalio/utils/log_utils.hh"
 
+namespace nalio {
 std::string cutParenthesesNTail(std::string &&pretty_func) {
   size_t pos = pretty_func.find('(');
   if (pos != std::string::npos) {
@@ -14,3 +15,4 @@ std::string cutParenthesesNTail(std::string &&pretty_func) {
   pretty_func = "[" + pretty_func + "]";
   return pretty_func;
 }
+}  // namespace nalio
