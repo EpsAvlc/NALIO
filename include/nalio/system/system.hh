@@ -18,7 +18,7 @@ class System {
  protected:
   virtual void propagate(){};
   virtual void update(){};
-  virtual Eigen::Isometry3d getEstimated(){};
+  virtual Eigen::Isometry3d getEstimated(){ return Eigen::Isometry3d(); };
 };
 }  // namespace nalio
 

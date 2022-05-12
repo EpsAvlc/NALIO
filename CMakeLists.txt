@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(nalio)
 
 add_compile_options(-std=c++11)
-set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+set(CMAKE_BUILD_TYPE "DEBUG")
 # -g 包含调试信息 
 # -Wall 启动所有的 warning
 # -O3 三级优化 最高的优化选项
@@ -47,6 +47,9 @@ include_directories(
   /usr/include/eigen3
 )
 
+######################## DEFINITIONS #############
+add_definitions(-DNALIO_DEBUG)
+
 ######################## LIBS ####################
 add_library(${PROJECT_NAME}_state
   src/state/loam_state.cc
@@ -78,21 +81,28 @@ target_link_libraries(${PROJECT_NAME}_propagator
 add_library(${PROJECT_NAME}_system
   src/system/loam_system.cc
 )
-target_link_libraries(${PROJECT_NAME}_feature
+target_link_libraries(${PROJECT_NAME}_system
 	${PCL_LIBRARIES}
   ${PROJECT_NAME}_propagator
 )
 
 
-# add_library((${PROJECT_NAME}_dataset)
+add_library(${PROJECT_NAME}_data
+  src/data/kitti_dataset.cc
+)
+target_link_libraries(${PROJECT_NAME}_data
+	${PCL_LIBRARIES}
+)
 ####################### Nodes ####################
-add_executable(${Project_name}_pipeline
+add_executable(${PROJECT_NAME}_pipeline
   src/nalio_pipeline.cc
 )
-target_link_libraries(${Project_name}_pipeline
+target_link_libraries(${PROJECT_NAME}_pipeline
   ${PROJECT_NAME}_feature
   ${PROJECT_NAME}_utils
   ${PROJECT_NAME}_system
+  ${PROJECT_NAME}_data
+  ${PROJECT_NAME}_state
 )
 
 # add_executable(feature_extraction
@@ -120,6 +130,8 @@ catkin_add_gtest(${PROJECT_NAME}_test
 target_link_libraries(${PROJECT_NAME}_test
   ${PROJECT_NAME}_state
   ${PROJECT_NAME}_propagator
+  ${PROJECT_NAME}_data
+  ${PROJECT_NAME}_system
   ${catkin_LIBRARIES}
   gtest_main
 )

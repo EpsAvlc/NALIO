@@ -13,11 +13,12 @@ struct Feature {
   PointT pt;
 };
 
-template <typename PointIn, typename PointOut>
+template <typename PointIn, typename FeatureT>
 class FeatureExtractor {
  public:
-  using FeatureT = Feature<PointOut>;
-  virtual int extract(const pcl::PointCloud<PointIn> in_cloud, std::vector<typename Feature<PointOut>::Ptr>* features) = 0;
+  virtual int extract(
+      const typename pcl::PointCloud<PointIn>::ConstPtr& cloud_in,
+      std::vector<FeatureT>* features) = 0;
 };
 }  // namespace nalio
 

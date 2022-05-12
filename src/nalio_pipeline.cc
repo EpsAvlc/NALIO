@@ -4,18 +4,27 @@
 
 #include "nalio/nailo.hh"
 
-
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "nalio_pipeline");
   ros::NodeHandle nh;
   
-  nalio::System::Ptr system_ptr = nalio::factory<nalio::System>::produce_unique("LOAMSystem");
-  nalio::Dataset::Ptr dataset_ptr = nalio::factory<nalio::Dataset>::produce_shared("KITTIDataset");
+  nalio::System::Ptr system_ptr = nalio::Factory<nalio::System>::produce_unique("LOAMSystem");
+  system_ptr->init();
+
+  // nalio::Dataset::Ptr dataset_ptr = nalio::Factory<nalio::Dataset>::produce_shared("KITTIDataset");
+  // dataset_ptr->init(false);
   
-  // while ()
+  ros::Rate rate(30);
+  nalio::DataPackage data_package;
+  while (ros::ok()) {
+    ros::spinOnce();
+    rate.sleep();
+    // if (!dataset_ptr->getDataPackage(&data_package)) {
+    //   continue;
+    // }
 
-  // system_ptr.reset()  
+    system_ptr->feedData(data_package);
+  }
 
-  ros::spin();
   return 0;
 }

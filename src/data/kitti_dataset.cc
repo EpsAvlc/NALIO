@@ -13,8 +13,9 @@ bool KITTIDataset::init(bool online) {
       return false;
     }
     lidar_sub_ =
-        nh_.subscribe("/velodyne_points", 1, KITTIDataset::lidarCallback, this);
+        nh_.subscribe("/velodyne_points", 1, &KITTIDataset::lidarCallback, this);
   }
+  return true;
 }
 
 void KITTIDataset::lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
@@ -27,12 +28,15 @@ bool KITTIDataset::getDataPackage(DataPackage* dp) {
   }
   pcl::PointCloud<pcl::PointXYZI> pc;
   pcl::fromROSMsg(*lidar_msg_list_.front(), pc);
-  dp->lidar_meas.resize(pc.size());
+  if (!dp->lidar_meas) {
+    dp->lidar_meas.reset(new DataPackage::PointCloudT);
+  }
+  dp->lidar_meas->resize(pc.size());
   for (int i = 0; i < pc.size(); ++i) {
-    dp->lidar_meas[i].x = pc[i].x;
-    dp->lidar_meas[i].y = pc[i].y;
-    dp->lidar_meas[i].z = pc[i].z;
-    dp->lidar_meas[i].intensity = pc[i].intensity;
+    (*dp->lidar_meas)[i].x = pc[i].x;
+    (*dp->lidar_meas)[i].y = pc[i].y;
+    (*dp->lidar_meas)[i].z = pc[i].z;
+    (*dp->lidar_meas)[i].intensity = pc[i].intensity;
   }
 
   return true;

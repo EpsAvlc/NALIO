@@ -12,8 +12,8 @@ class Dataset {
  public:
   using Ptr = std::shared_ptr<Dataset>;
   virtual bool init(bool online) { return false; }
-  virtual bool getDataPackage(DataPackage* data){};
-
+  virtual bool getDataPackage(DataPackage* data){ return false; };
+  virtual ~Dataset() {}
  protected:
   bool online_;
 };

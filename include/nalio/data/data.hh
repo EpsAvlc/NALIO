@@ -26,7 +26,7 @@ struct IMUData {};
 struct DataPackage {
   using Ptr = std::shared_ptr<DataPackage>;
   using PointCloudT = pcl::PointCloud<NalioPoint>;
-  PointCloudT lidar_meas;
+  PointCloudT::Ptr lidar_meas;
   std::vector<IMUData> imu_meas;
 };
 

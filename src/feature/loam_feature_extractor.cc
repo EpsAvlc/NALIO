@@ -10,10 +10,10 @@
 namespace nalio {
 
 int LOAMFeatureExtractor::extract(
-    const pcl::PointCloud<pcl::PointXYZI> cloud_in,
-    std::vector<Feature<pcl::PointXYZI>::Ptr>* features) {
+    const DataPackage::PointCloudT::ConstPtr& cloud_in,
+    std::vector<LOAMFeature>* features) {
   std::vector<PointCloudT> scan_pts;
-  if (!(0 == splitScans(cloud_in, &scan_pts))) {
+  if (!(0 == splitScans(*cloud_in, &scan_pts))) {
     ROS_ERROR_STREAM_FUNC("Failed to splitScans");
     return -1;
   }
@@ -88,14 +88,12 @@ int LOAMFeatureExtractor::extract(
           LOAMFeature::Ptr edge_feature(new LOAMFeature);
           edge_feature->type.val = LOAMFeature::Type::kSharp;
           edge_feature->pt = sharp_queue.top().pt;
-          features->push_back(
-              std::dynamic_pointer_cast<Feature<pcl::PointXYZI>>(edge_feature));
+          features->push_back(*edge_feature);
         }
         LOAMFeature::Ptr weak_edge_feature(new LOAMFeature);
         weak_edge_feature->type.val = LOAMFeature::Type::kLessSharp;
         weak_edge_feature->pt = sharp_queue.top().pt;
-        features->push_back(std::dynamic_pointer_cast<Feature<pcl::PointXYZI>>(
-            weak_edge_feature));
+        features->push_back(*weak_edge_feature);
 
         edge_inds.insert(pt_ind);
 
@@ -121,8 +119,7 @@ int LOAMFeatureExtractor::extract(
         LOAMFeature::Ptr plane_feature(new LOAMFeature);
         plane_feature->type.val = LOAMFeature::Type::kFlat;
         plane_feature->pt = flat_queue.top().pt;
-        features->push_back(
-            std::dynamic_pointer_cast<Feature<pcl::PointXYZI>>(plane_feature));
+        features->push_back(*plane_feature);
 
         for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
           float diff_x = scan_pts[line][j].x - scan_pts[line][pt_ind].x;
@@ -146,7 +143,7 @@ int LOAMFeatureExtractor::extract(
     }
   }
 
-  pcl::VoxelGrid<pcl::PointXYZI> ds_filter;
+  pcl::VoxelGrid<NalioPoint> ds_filter;
   ds_filter.setInputCloud(less_flat_cloud);
   ds_filter.setLeafSize(0.2, 0.2, 0.2);
   ds_filter.filter(*less_flat_cloud);
@@ -155,7 +152,7 @@ int LOAMFeatureExtractor::extract(
     LOAMFeature::Ptr less_flat_feature(new LOAMFeature);
     less_flat_feature->pt = less_flat_cloud->at(pi);
     less_flat_feature->type.val = LOAMFeature::Type::kLessFlat;
-    features->push_back(std::dynamic_pointer_cast<Feature<pcl::PointXYZI>>(less_flat_feature));
+    features->push_back(*less_flat_feature);
   }
 
   return 0;
@@ -163,7 +160,7 @@ int LOAMFeatureExtractor::extract(
 
 int LOAMFeatureExtractor::splitScans(const PointCloudT& cloud_in,
                                      std::vector<PointCloudT>* scan_pts) {
-  pcl::PointXYZI pt;
+  NalioPoint pt;
   int num_points = cloud_in.size();
   // atan2 (-pi, pi]
   // 表示当前点与x轴正方向的夹角，并且从x轴逆时针的角度为正，顺时针的角度为负

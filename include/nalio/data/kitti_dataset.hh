@@ -17,14 +17,14 @@ class KITTIDataset : public Dataset {
   KITTIDataset() {}
   bool init(bool online) override;
   bool getDataPackage(DataPackage* data) override;
+  ~KITTIDataset() override {}
  private:
   void lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg);
-
   mutable std::mutex lidar_msg_list_mutex_;
 
   ros::NodeHandle nh_;
   ros::Subscriber lidar_sub_;
-  std::list<const sensor_msgs::PointCloud2ConstPtr> lidar_msg_list_;
+  std::list<sensor_msgs::PointCloud2ConstPtr> lidar_msg_list_;
 };
 
 REGISTER_NALIO(Dataset, KITTIDataset, "LOAMSystem")
