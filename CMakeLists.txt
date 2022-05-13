@@ -51,6 +51,20 @@ include_directories(
 add_definitions(-DNALIO_DEBUG)
 
 ######################## LIBS ####################
+add_library(${PROJECT_NAME}_utils
+  src/utils/log_utils.cc
+)
+target_link_libraries(${PROJECT_NAME}_utils
+  ${catkin_LIBRARIES}
+)
+
+add_library(${PROJECT_NAME}_param
+  src/param/param_server.cc
+)
+target_link_libraries(${PROJECT_NAME}_param
+  ${catkin_LIBRARIES}
+)
+
 add_library(${PROJECT_NAME}_state
   src/state/loam_state.cc
 )
@@ -62,13 +76,6 @@ add_library(${PROJECT_NAME}_feature
 )
 target_link_libraries(${PROJECT_NAME}_feature
 	${PCL_LIBRARIES}
-)
-
-add_library(${PROJECT_NAME}_utils
-  src/utils/log_utils.cc
-)
-target_link_libraries(${PROJECT_NAME}_utils
-  ${catkin_LIBRARIES}
 )
 
 add_library(${PROJECT_NAME}_propagator

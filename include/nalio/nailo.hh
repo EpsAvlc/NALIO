@@ -6,6 +6,7 @@
 #include "nalio/system/loam_system.hh"
 #include "nalio/data/dataset.hh"
 #include "nalio/data/kitti_dataset.hh"
+#include "nalio/param/param_server.hh"
 
 
 #endif // NALIO_NAILO_HH__

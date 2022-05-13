@@ -6,12 +6,12 @@
 
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "nalio_pipeline");
-  ros::NodeHandle nh;
+  // ros::NodeHandle nh;
   
   nalio::System::Ptr system_ptr = nalio::Factory<nalio::System>::produce_unique("LOAMSystem");
   system_ptr->init();
 
-  // nalio::Dataset::Ptr dataset_ptr = nalio::Factory<nalio::Dataset>::produce_shared("KITTIDataset");
+  nalio::Dataset::Ptr dataset_ptr = nalio::Factory<nalio::Dataset>::produce_shared("KITTIDataset");
   // dataset_ptr->init(false);
   
   ros::Rate rate(30);
@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     //   continue;
     // }
 
-    system_ptr->feedData(data_package);
+    // system_ptr->feedData(data_package);
   }
 
   return 0;

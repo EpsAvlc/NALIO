@@ -1,8 +1,29 @@
+#include <gtest/gtest.h>
+
+#include "nalio/factory/factory.hh"
 #include "nalio/propagator/linear_propagator.hh"
 #include "nalio/state/loam_state.hh"
 #include "nalio/state/state.hh"
 
-#include <gtest/gtest.h>
+TEST(NALIO, FACTORY) {
+  class Base {
+   public:
+    virtual int calc() { return 5; }
+  };
+
+  class Derived : public Base {
+   public:
+    virtual int calc() { return 10; }
+  };
+
+  using namespace nalio;
+  REGISTER_NALIO(Base, Derived, "TEST_Derived")
+  auto derived_ptr = nalio::Factory<Base>::produce_unique("TEST_Derived");
+  EXPECT_NE(derived_ptr, nullptr);
+  EXPECT_EQ(derived_ptr->calc(), 10);
+  auto derived_ptr2 = nalio::Factory<Base>::produce_unique("TEST_Derived2");
+  EXPECT_EQ(derived_ptr2, nullptr);
+}
 
 TEST(NALIO, LOAM_STATE) {
   nalio::LOAMState state;

@@ -12,8 +12,8 @@ bool KITTIDataset::init(bool online) {
       ROS_ERROR_STREAM_FUNC("ROS has not been inited. Init failed.");
       return false;
     }
-    lidar_sub_ =
-        nh_.subscribe("/velodyne_points", 1, &KITTIDataset::lidarCallback, this);
+    // lidar_sub_ =
+    //     nh_.subscribe("/velodyne_points", 1, &KITTIDataset::lidarCallback, this);
   }
   return true;
 }
