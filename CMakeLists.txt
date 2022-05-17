@@ -53,6 +53,7 @@ add_definitions(-DNALIO_DEBUG)
 ######################## LIBS ####################
 add_library(${PROJECT_NAME}_utils
   src/utils/log_utils.cc
+  src/utils/read_write_mutex.cc
 )
 target_link_libraries(${PROJECT_NAME}_utils
   ${catkin_LIBRARIES}
@@ -96,6 +97,7 @@ target_link_libraries(${PROJECT_NAME}_system
 
 add_library(${PROJECT_NAME}_data
   src/data/kitti_dataset.cc
+  src/data/datahub.cc
 )
 target_link_libraries(${PROJECT_NAME}_data
 	${PCL_LIBRARIES}
