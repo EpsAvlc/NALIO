@@ -15,7 +15,6 @@ int main(int argc, char* argv[]) {
   // dataset_ptr->init(false);
   
   ros::Rate rate(30);
-  nalio::DataPackage data_package;
   while (ros::ok()) {
     ros::spinOnce();
     rate.sleep();

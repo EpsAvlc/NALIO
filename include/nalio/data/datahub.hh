@@ -12,6 +12,8 @@
 
 namespace nalio {
 
+using NalioCallback =
+    std::function<void(const std::vector<std::vector<Message::Ptr>>&)>;
 class DataBuffer;
 
 class DataSyncer {
@@ -28,11 +30,17 @@ class DataSyncer {
 
   DataSyncer(const std::vector<std::string>& message_names,
              const std::vector<SyncType> sync_types, DataBuffer* buffer);
+  
+  ~DataSyncer();
 
   bool getSyncMessages(std::vector<std::vector<Message::Ptr>>* synced_messages,
                        const double t_thres = 0.2);
 
   bool getMessageId(const std::string& message_name, uint16_t* message_id);
+
+  void registerCallback(const NalioCallback& cb);
+
+  void syncThread();
 
  private:
   DataSyncer(){};
@@ -41,11 +49,16 @@ class DataSyncer {
     SyncType sync_type;
     std::string name;
   };
+
+  std::vector<NalioCallback> callbacks_;
+
   DataBuffer* buffer_;
   std::map<std::string, uint16_t> message_ids_;
   std::vector<uint16_t> buffer_message_ids_;
   std::vector<MessageInfo> message_infos_;
   std::vector<std::list<Message::Ptr>::iterator> message_iters_;
+  std::thread sync_thread_;
+  bool running_;
 };
 
 class DataBuffer {
@@ -71,8 +84,8 @@ class DataBuffer {
   void pruneBuffs();
 
   IteratorType getMessagesBetween(const IteratorType& iter_begin,
-                                  const IteratorType& iter_end, const int64_t tl,
-                                  const int64_t tr,
+                                  const IteratorType& iter_end,
+                                  const int64_t tl, const int64_t tr,
                                   std::vector<Message::Ptr>* synced_msgs);
 
   IteratorType getMessagesBefore(const IteratorType& iter_begin,

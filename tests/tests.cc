@@ -91,7 +91,7 @@ class DatahubTest : public ::testing::Test {
           std::chrono::steady_clock::now();
       nalio::Message::Ptr msg(new nalio::Message);
       msg->name = msg_name;
-      msg->timestamp =
+      msg->header.timestamp =
           std::chrono::time_point_cast<std::chrono::microseconds>(t_n)
               .time_since_epoch()
               .count();
@@ -125,11 +125,13 @@ TEST_F(DatahubTest, Nearest) {
     while (!lidar_img_syncer->getSyncMessages(&synced_msgs)) {
       std::this_thread::yield();
     }
-    lidar_times.push_back(synced_msgs[0][0]->timestamp);
-    image_times.push_back(synced_msgs[0][0]->timestamp);
+    lidar_times.push_back(synced_msgs[0][0]->header.timestamp.usec());
+    image_times.push_back(synced_msgs[0][0]->header.timestamp.usec());
 
-    std::cout << "[----------] lidar time: " << synced_msgs[0][0]->timestamp
-              << ", image time:" << synced_msgs[1][0]->timestamp << std::endl;
+    std::cout << "[----------] lidar time: "
+              << synced_msgs[0][0]->header.timestamp.usec()
+              << ", image time:" << synced_msgs[1][0]->header.timestamp.usec()
+              << std::endl;
   }
   for (int i = 0; i < lidar_times.size() - 1; ++i) {
     EXPECT_TRUE(lidar_times[i + 1] - lidar_times[i] < 0.15 * 1000000);
@@ -153,12 +155,16 @@ TEST_F(DatahubTest, Bilateral) {
     while (!lidar_img_syncer->getSyncMessages(&synced_msgs)) {
       std::this_thread::yield();
     }
-    pivot_timestamps.push_back(synced_msgs[0][0]->timestamp);
-    std::cout << "[----------] lidar time: " << synced_msgs[0][0]->timestamp
-              << ", ego time:" << synced_msgs[1][0]->timestamp << ", "
-              << synced_msgs[1][1]->timestamp << std::endl;
-    EXPECT_TRUE(synced_msgs[1][0]->timestamp < synced_msgs[0][0]->timestamp &&
-                synced_msgs[1][1]->timestamp > synced_msgs[0][0]->timestamp);
+    pivot_timestamps.push_back(synced_msgs[0][0]->header.timestamp.usec());
+    std::cout << "[----------] lidar time: "
+              << synced_msgs[0][0]->header.timestamp.usec()
+              << ", ego time:" << synced_msgs[1][0]->header.timestamp.usec()
+              << ", " << synced_msgs[1][1]->header.timestamp.usec()
+              << std::endl;
+    EXPECT_TRUE(synced_msgs[1][0]->header.timestamp.usec() <
+                    synced_msgs[0][0]->header.timestamp.usec() &&
+                synced_msgs[1][1]->header.timestamp.usec() >
+                    synced_msgs[0][0]->header.timestamp.usec());
   }
 }
 
@@ -175,8 +181,32 @@ TEST_F(DatahubTest, Multiple) {
     while (!lidar_img_syncer->getSyncMessages(&synced_msgs)) {
       std::this_thread::yield();
     }
-    pivot_timestamps.push_back(synced_msgs[0][0]->timestamp);
-    std::cout << "[----------] lidar time: " << synced_msgs[0][0]->timestamp
+    pivot_timestamps.push_back(synced_msgs[0][0]->header.timestamp.usec());
+    std::cout << "[----------] lidar time: "
+              << synced_msgs[0][0]->header.timestamp.usec()
               << ", imu size:" << synced_msgs[1].size() << std::endl;
+  }
+}
+
+TEST_F(DatahubTest, LVIO) {
+  std::vector<std::string> msg_names = {"/sensor/LiDAR", "/sensor/Image",
+                                        "/sensor/IMU"};
+  std::vector<nalio::DataSyncer::SyncType> msg_sync_types = {
+      nalio::DataSyncer::SyncType::kNearest,
+      nalio::DataSyncer::SyncType::kNearest,
+      nalio::DataSyncer::SyncType::kMultiple};
+  nalio::DataSyncer::Ptr lidar_img_syncer =
+      buffer_.createDataSyncer(msg_names, msg_sync_types);
+  std::vector<std::vector<nalio::Message::Ptr>> synced_msgs;
+  std::vector<int64_t> pivot_timestamps;
+  for (uint i = 0; i < 10; ++i) {
+    while (!lidar_img_syncer->getSyncMessages(&synced_msgs)) {
+      std::this_thread::yield();
+    }
+    pivot_timestamps.push_back(synced_msgs[0][0]->header.timestamp.usec());
+    std::cout << "[----------] lidar time: "
+              << synced_msgs[0][0]->header.timestamp.usec()
+              << ", Image time: " << synced_msgs[1][0]->header.timestamp.usec()
+              << ", imu size:" << synced_msgs[2].size() << std::endl;
   }
 }

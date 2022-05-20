@@ -5,21 +5,21 @@
 #include <ros/ros.h>
 #endif
 
-#include "nalio/system/system.hh"
 #include "nalio/factory/factory.hh"
 #include "nalio/feature/loam_feature_extractor.hh"
-#include "nalio/state/loam_state.hh"
 #include "nalio/propagator/linear_propagator.hh"
+#include "nalio/state/loam_state.hh"
+#include "nalio/system/system.hh"
+#include "nalio/data/message.hh"
 
 namespace nalio {
 class LOAMSystem final : public System {
  public:
   using Ptr = std::unique_ptr<LOAMSystem>;
-  using PointCloudT = DataPackage::PointCloudT;
+  using PointCloudT = pcl::PointCloud<NalioPoint>;
   void init() override;
   void stop() override;
-  void feedData(const DataPackage& data);
-  
+  void feedData(const MessagePackage& data);
 
  private:
   void propagate() override;
@@ -41,8 +41,6 @@ class LOAMSystem final : public System {
   ros::Publisher less_flat_feature_pub_;
 #endif
 };
-
-
 
 REGISTER_NALIO(System, LOAMSystem, "LOAMSystem")
 }  // namespace nalio

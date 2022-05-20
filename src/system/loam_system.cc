@@ -26,15 +26,15 @@ void LOAMSystem::stop() {
   
 }
 
-void LOAMSystem::feedData(const DataPackage& data) {
+void LOAMSystem::feedData(const MessagePackage& msgs) {
   propagate();
   std::vector<LOAMFeature> features;
-  if (!feature_extractor_.extract(data.lidar_meas, &features)) {
-    ROS_ERROR_STREAM_FUNC("Failed to extract features.");
-  }
+  // if (!feature_extractor_.extract(data.lidar_meas, &features)) {
+  //   ROS_ERROR_STREAM_FUNC("Failed to extract features.");
+  // }
 
 #ifdef NALIO_DEBUG
-  DataPackage::PointCloudT flat_pc, less_flat_pc, sharp_pc, less_sharp_pc;
+  PointCloudT flat_pc, less_flat_pc, sharp_pc, less_sharp_pc;
   for (int fi = 0; fi < features.size(); ++fi) {
     switch (features[fi].type.val) {
       case LOAMFeature::Type::kSharp:

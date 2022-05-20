@@ -22,8 +22,8 @@ struct LOAMFeature : public Feature<NalioPoint> {
 class LOAMFeatureExtractor : public FeatureExtractor<NalioPoint, LOAMFeature> {
  public:
   using FeatureT = LOAMFeature;
-  using PointCloudT = DataPackage::PointCloudT;
-  int extract(const pcl::PointCloud<NalioPoint>::ConstPtr&,
+  using PointCloudT = pcl::PointCloud<NalioPoint>;
+  int extract(const PointCloudT::ConstPtr&,
               std::vector<FeatureT>* features) override;
   // int extract(const pcl::PointCloud<NalioPoint>::ConstPtr& cloud_in,
   //             std::vector<LOAMFeature>* features) override;

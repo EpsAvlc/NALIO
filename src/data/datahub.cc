@@ -40,7 +40,7 @@ void DataBuffer::registerMessage(const std::string& message_name,
   message_buffs_.emplace_back(std::list<Message::Ptr>());
   Message::Ptr tmp_msg(new Message);
   tmp_msg->name = message_name;
-  tmp_msg->timestamp = -1;
+  tmp_msg->header.timestamp = -1;
   // To make message_buffs[x].begin() != message_buffs[x].end()
   message_buffs_.back().emplace_back(tmp_msg);
 }
@@ -55,11 +55,13 @@ void DataBuffer::receiveMessage(const Message::Ptr& message) {
   }
 
   if (!message_buffs_[message_id].empty() &&
-      message->timestamp < message_buffs_[message_id].back()->timestamp) {
-    ROS_ERROR_STREAM_FUNC("Disorder messages: "
-                          << message->name << ", current mesaage timestamp: "
-                          << message->timestamp << ", last message timestamp: "
-                          << message_buffs_[message_id].back()->timestamp);
+      message->header.timestamp <
+          message_buffs_[message_id].back()->header.timestamp) {
+    ROS_ERROR_STREAM_FUNC(
+        "Disorder messages: "
+        << message->name << ", current mesaage timestamp: "
+        << message->header.timestamp.usec() << ", last message timestamp: "
+        << message_buffs_[message_id].back()->header.timestamp.usec());
     throw(std::logic_error("Disorder messages."));
   }
   message_buffs_[message_id].push_back(message);
@@ -92,7 +94,7 @@ void DataBuffer::pruneBuffs() {
             continue;
           }
           if ((*data_syncers_[si]->message_iters_[syncer_message_id])
-                  ->timestamp > (*new_begin_iter)->timestamp) {
+                  ->header.timestamp > (*new_begin_iter)->header.timestamp) {
             continue;
           }
           data_syncers_[si]->message_iters_[syncer_message_id] = new_begin_iter;
@@ -111,7 +113,7 @@ DataBuffer::IteratorType DataBuffer::messageBuffEnd(const uint16_t id) {
 DataSyncer::DataSyncer(const std::vector<std::string>& message_names,
                        const std::vector<SyncType> sync_types,
                        DataBuffer* buffer)
-    : buffer_(buffer) {
+    : buffer_(buffer), running_(true) {
   ReaderLockGuard lock(buffer->mutex_);
   for (size_t mi = 0; mi < message_names.size(); ++mi) {
     if (message_names.size() != sync_types.size()) {
@@ -135,6 +137,14 @@ DataSyncer::DataSyncer(const std::vector<std::string>& message_names,
     message_infos_.emplace_back(info);
     message_iters_.emplace_back(
         buffer_->message_buffs_[buffer_message_id].begin());
+  }
+  sync_thread_ = std::thread(&DataSyncer::syncThread, this);
+}
+
+DataSyncer::~DataSyncer() {
+  running_ = false;
+  while (sync_thread_.joinable()) {
+    sync_thread_.join();
   }
 }
 
@@ -164,7 +174,7 @@ bool DataSyncer::getSyncMessages(
   ++new_iters[0];
 
   synced_msgs->at(0).emplace_back(*new_iters[0]);
-  int64_t pivot_timestamp = (*new_iters[0])->timestamp;
+  int64_t pivot_timestamp = (*new_iters[0])->header.timestamp.usec();
   int64_t tl = pivot_timestamp - static_cast<int64_t>(t_thres * 1000000);
   int64_t tr = pivot_timestamp + static_cast<int64_t>(t_thres * 1000000);
 
@@ -187,25 +197,25 @@ bool DataSyncer::getSyncMessages(
         auto nearest_iter = std::min_element(
             between_msgs.begin(), between_msgs.end(),
             [&pivot_timestamp](Message::Ptr& lhs, Message::Ptr& rhs) {
-              return std::abs(lhs->timestamp - pivot_timestamp) <
-                     std::abs(rhs->timestamp - pivot_timestamp);
+              return std::abs(lhs->header.timestamp.usec() - pivot_timestamp) <
+                     std::abs(rhs->header.timestamp.usec() - pivot_timestamp);
             });
         synced_msgs->at(mi).push_back(*nearest_iter);
       } else {
         // skip head node.
         if (buffer_->message_buffs_[buffer_message_ids_[mi]].size() > 1 &&
-            (*message_iters_[mi])->timestamp < 0) {
+            (*message_iters_[mi])->header.timestamp < 0) {
           ++message_iters_[mi];
         }
         // increate pivot iterator to make it between two other msgs.
-        if ((*message_iters_[mi])->timestamp > pivot_timestamp) {
+        if ((*message_iters_[mi])->header.timestamp.usec() > pivot_timestamp) {
           message_iters_[0] = new_iters[0];
           return false;
         }
         size_t lhs_ind = 0;
         for (; lhs_ind < between_msgs.size() - 1; ++lhs_ind) {
-          if (between_msgs[lhs_ind]->timestamp < pivot_timestamp &&
-              between_msgs[lhs_ind + 1]->timestamp > pivot_timestamp) {
+          if (between_msgs[lhs_ind]->header.timestamp < pivot_timestamp &&
+              between_msgs[lhs_ind + 1]->header.timestamp > pivot_timestamp) {
             break;
           }
         }
@@ -253,6 +263,27 @@ bool DataSyncer::getMessageId(const std::string& message_name,
   }
 }
 
+void DataSyncer::registerCallback(const NalioCallback& cb) {
+  callbacks_.emplace_back(cb);
+}
+
+void DataSyncer::syncThread() {
+  while (running_) {
+    if (callbacks_.size() == 0) {
+      std::this_thread::yield();
+      continue;
+    }
+
+    std::vector<std::vector<Message::Ptr>> msgs;
+    while (!getSyncMessages(&msgs)) {
+      std::this_thread::yield();
+    }
+    for (size_t ci = 0; ci < callbacks_.size(); ++ci) {
+      callbacks_[ci](msgs);
+    }
+  }
+}
+
 DataBuffer::IteratorType DataBuffer::getMessagesBetween(
     const IteratorType& iter_begin, const IteratorType& iter_end,
     const int64_t tl, const int64_t tr,
@@ -264,13 +295,13 @@ DataBuffer::IteratorType DataBuffer::getMessagesBetween(
   }
   synced_msgs->clear();
   for (auto mit = iter_begin; mit != iter_end; ++mit) {
-    if ((*mit)->timestamp > tl && (*mit)->timestamp < tr) {
+    if ((*mit)->header.timestamp > tl && (*mit)->header.timestamp < tr) {
       if (ret == iter_end) {
         ret = mit;
       }
       synced_msgs->push_back(*mit);
     }
-    if ((*mit)->timestamp > tr) {
+    if ((*mit)->header.timestamp > tr) {
       break;
     }
   }
@@ -287,7 +318,7 @@ DataBuffer::IteratorType DataBuffer::getMessagesBefore(
   before_msgs->clear();
   IteratorType ret = iter_end;
   for (auto iter = iter_begin; iter != iter_end; ++iter) {
-    if ((*iter)->timestamp < tr) {
+    if ((*iter)->header.timestamp < tr) {
       before_msgs->push_back(*iter);
       ret = iter;
     } else {

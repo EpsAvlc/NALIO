@@ -9,9 +9,8 @@
 
 namespace nalio {
 
-int LOAMFeatureExtractor::extract(
-    const DataPackage::PointCloudT::ConstPtr& cloud_in,
-    std::vector<LOAMFeature>* features) {
+int LOAMFeatureExtractor::extract(const PointCloudT::ConstPtr& cloud_in,
+                                  std::vector<LOAMFeature>* features) {
   std::vector<PointCloudT> scan_pts;
   if (!(0 == splitScans(*cloud_in, &scan_pts))) {
     ROS_ERROR_STREAM_FUNC("Failed to splitScans");

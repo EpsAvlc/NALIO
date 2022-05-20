@@ -98,9 +98,11 @@ target_link_libraries(${PROJECT_NAME}_system
 add_library(${PROJECT_NAME}_data
   src/data/kitti_dataset.cc
   src/data/datahub.cc
+  src/data/data_converter.cc
 )
 target_link_libraries(${PROJECT_NAME}_data
 	${PCL_LIBRARIES}
+  ${catkin_LIBRARIES}
 )
 ####################### Nodes ####################
 add_executable(${PROJECT_NAME}_pipeline
