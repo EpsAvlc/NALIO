@@ -3,8 +3,9 @@
 #include "nalio/utils/log_utils.hh"
 
 #ifdef NALIO_DEBUG
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/console/time.h>
 #include "sensor_msgs/PointCloud2.h"
-#include "pcl_conversions/pcl_conversions.h"
 #endif
 
 namespace nalio {
@@ -22,43 +23,47 @@ void LOAMSystem::init() {
 #endif
 }
 
-void LOAMSystem::stop() {
-  
-}
+void LOAMSystem::stop() {}
 
 void LOAMSystem::feedData(const MessagePackage& msgs) {
+  ROS_INFO_STREAM_FUNC("Feed a message pack. Frame id: " << msgs[0][0]->header.frame_id);
   propagate();
-  std::vector<LOAMFeature> features;
-  // if (!feature_extractor_.extract(data.lidar_meas, &features)) {
-  //   ROS_ERROR_STREAM_FUNC("Failed to extract features.");
-  // }
-
-#ifdef NALIO_DEBUG
-  PointCloudT flat_pc, less_flat_pc, sharp_pc, less_sharp_pc;
-  for (int fi = 0; fi < features.size(); ++fi) {
-    switch (features[fi].type.val) {
-      case LOAMFeature::Type::kSharp:
-        sharp_pc.push_back(features[fi].pt);
-        break;
-      case LOAMFeature::Type::kLessSharp:
-        less_sharp_pc.push_back(features[fi].pt);
-        break;
-      case LOAMFeature::Type::kFlat:
-        flat_pc.push_back(features[fi].pt);
-        break;
-      case LOAMFeature::Type::kLessFlat:
-        less_flat_pc.push_back(features[fi].pt);
-        break;
-      default:
-        break;
+  LOAMFeaturePackage feature_package;
+  PointCloudData::Ptr pc_data;
+  std::string msg_frame_id;
+  for (int mi = 0; mi < msgs.size(); ++mi) {
+    if (msgs[mi][0]->type.val == Message::Type::kLidar) {
+      pc_data = std::dynamic_pointer_cast<PointCloudData>(msgs[mi][0]->data);
+      msg_frame_id = msgs[mi][0]->header.frame_id;
+      break;
     }
   }
+#ifdef NALIO_DEBUG
+  pcl::console::TicToc tt;
+  tt.tic();
+#endif
+  if (!feature_extractor_.extract(pc_data->point_cloud, &feature_package)) {
+    ROS_ERROR_STREAM_FUNC("Failed to extract features.");
+  }
+#ifdef NALIO_DEBUG
+  double fe_time = tt.toc();
+  ROS_INFO_STREAM_FUNC("feature extractor elapse time: " << fe_time << "ms.");
+#endif
 
-  sensor_msgs::PointCloud2 flat_pc_msg, less_flat_pc_msg, sharp_pc_msg, less_sharp_pc_msg;
-  pcl::toROSMsg(flat_pc, flat_pc_msg);
-  pcl::toROSMsg(less_flat_pc, less_flat_pc_msg);
-  pcl::toROSMsg(sharp_pc, sharp_pc_msg);
-  pcl::toROSMsg(less_sharp_pc, less_sharp_pc_msg);
+#ifdef NALIO_DEBUG
+  ROS_INFO_STREAM_FUNC("Feed data.");
+
+  sensor_msgs::PointCloud2 flat_pc_msg, less_flat_pc_msg, sharp_pc_msg,
+      less_sharp_pc_msg;
+  pcl::toROSMsg(*feature_package.flat_cloud, flat_pc_msg);
+  pcl::toROSMsg(*feature_package.less_flat_cloud, less_flat_pc_msg);
+  pcl::toROSMsg(*feature_package.sharp_cloud, sharp_pc_msg);
+  pcl::toROSMsg(*feature_package.less_sharp_cloud, less_sharp_pc_msg);
+
+  flat_pc_msg.header.frame_id = msg_frame_id;
+  less_flat_pc_msg.header.frame_id = msg_frame_id;
+  sharp_pc_msg.header.frame_id = msg_frame_id;
+  less_sharp_pc_msg.header.frame_id = msg_frame_id;
 
   flat_feature_pub_.publish(flat_pc_msg);
   less_flat_feature_pub_.publish(less_flat_pc_msg);
@@ -74,9 +79,7 @@ void LOAMSystem::propagate() {
   state_.set(eigenToState(propagated_pose));
 }
 
-void LOAMSystem::update() {
-  
-}
+void LOAMSystem::update() {}
 
 Eigen::Isometry3d LOAMSystem::getEstimated() {
   return stateToEigen(state_.get());

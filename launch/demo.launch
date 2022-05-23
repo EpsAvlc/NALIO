@@ -1,10 +1,10 @@
 <launch>
-    <arg name="debug" default="true"/>
+    <arg name="debug" default="false"/>
     <group if="$(arg debug)">
         <node name="nalio_pipeline" pkg="nalio" type="nalio_pipeline" launch-prefix="gdb" output="screen"/> 
     </group>
     <group unless="$(arg debug)">
         <node name="nalio_pipeline" pkg="nalio" type="nalio_pipeline" output="screen"/> 
-        <node pkg="rviz" type="rviz" name="rviz_nalio" args="-d $(find nalio)/rviz/demo.rviz"/>
+        <!-- <node pkg="rviz" type="rviz" name="rviz_nalio" args="-d $(find nalio)/rviz/demo.rviz"/> -->
     </group>
 </launch>

@@ -278,6 +278,9 @@ void DataSyncer::syncThread() {
     while (!getSyncMessages(&msgs)) {
       std::this_thread::yield();
     }
+    ROS_INFO_STREAM_FUNC(
+        "Get a sync message pack."
+        << std::dynamic_pointer_cast<PointCloudData>(msgs[0][0]->data)->point_cloud.get());
     for (size_t ci = 0; ci < callbacks_.size(); ++ci) {
       callbacks_[ci](msgs);
     }

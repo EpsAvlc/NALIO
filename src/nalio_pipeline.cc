@@ -1,28 +1,31 @@
 #include <pcl/point_types.h>
-#include <sensor_msgs/PointCloud2.h>
 #include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #include "nalio/nailo.hh"
 
+nalio::System::Ptr system_ptr;
+nalio::Dataset::Ptr dataset_ptr;
+
+void dataCallback(const nalio::MessagePackage& package) {
+  ROS_INFO_STREAM_FUNC("enter pipeline data cb");
+  system_ptr->feedData(package);
+}
+
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "nalio_pipeline");
-  // ros::NodeHandle nh;
-  
-  nalio::System::Ptr system_ptr = nalio::Factory<nalio::System>::produce_unique("LOAMSystem");
+
+  system_ptr = nalio::Factory<nalio::System>::produce_unique("LOAMSystem");
   system_ptr->init();
 
-  nalio::Dataset::Ptr dataset_ptr = nalio::Factory<nalio::Dataset>::produce_shared("KITTIDataset");
-  // dataset_ptr->init(false);
-  
+  dataset_ptr = nalio::Factory<nalio::Dataset>::produce_shared("KITTIDataset");
+  dataset_ptr->init(true);
+  dataset_ptr->registerCallback(dataCallback);
+
   ros::Rate rate(30);
   while (ros::ok()) {
     ros::spinOnce();
     rate.sleep();
-    // if (!dataset_ptr->getDataPackage(&data_package)) {
-    //   continue;
-    // }
-
-    // system_ptr->feedData(data_package);
   }
 
   return 0;

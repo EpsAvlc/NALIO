@@ -30,7 +30,7 @@ class LOAMSystem final : public System {
   Eigen::Isometry3d stateToEigen(const LOAMState::StateT& state);
 
   LinearPropagator propagator_;
-  LOAMFeatureExtractor feature_extractor_;
+  LOAMFeatureExtractor<64> feature_extractor_;
   LOAMState state_;
 
 #ifdef NALIO_DEBUG

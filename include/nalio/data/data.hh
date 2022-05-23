@@ -13,18 +13,20 @@ struct NalioPoint {
   PCL_ADD_POINT4D;  // preferred way of adding a XYZ+padding
   float intensity;
   float rel_time;
+  uint16_t line;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW  // make sure our new allocators are aligned
 } EIGEN_ALIGN16;  // enforce SSE padding for correct memory alignment
 
-POINT_CLOUD_REGISTER_POINT_STRUCT(NalioPoint,
-                                  (float, x, x)(float, y, y)(float, z, z)(
-                                      float, intensity,
-                                      intensity)(float, rel_time, rel_time))
+POINT_CLOUD_REGISTER_POINT_STRUCT(
+    NalioPoint,
+    (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(
+        float, rel_time, rel_time)(uint16_t, line, line))
 
 namespace nalio {
 
 struct Data {
   using Ptr = std::shared_ptr<Data>;
+  virtual ~Data() {}
 };
 
 struct IMUData : public Data {
@@ -35,11 +37,9 @@ struct IMUData : public Data {
 };
 
 struct PointCloudData : public Data {
-  pcl::PointCloud<NalioPoint> point_cloud;
+  using Ptr = std::shared_ptr<PointCloudData>;
+  pcl::PointCloud<NalioPoint>::Ptr point_cloud;
 };
-
-
-
 
 }  // namespace nalio
 

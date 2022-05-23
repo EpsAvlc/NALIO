@@ -32,10 +32,21 @@ std::shared_ptr<nalio::Message> toNalioMessage(
     const std::string& name) {
   std::shared_ptr<Message> ret(new Message);
   std::shared_ptr<PointCloudData> point_cloud_data(new PointCloudData);
-  pcl::fromROSMsg(*point_cloud_msg, point_cloud_data->point_cloud);
-  ret->data = point_cloud_data;
+  point_cloud_data->point_cloud.reset(new pcl::PointCloud<NalioPoint>);
+
+  pcl::PointCloud<pcl::PointXYZI> ori_pc;
+  pcl::fromROSMsg(*point_cloud_msg, ori_pc);
+
+  point_cloud_data->point_cloud->resize(ori_pc.size());
+  for (size_t pi = 0; pi < ori_pc.size(); ++pi) {
+    memcpy((*point_cloud_data->point_cloud)[pi].data, ori_pc[pi].data,
+           sizeof(float) * 4);
+    (*point_cloud_data->point_cloud)[pi].intensity = ori_pc[pi].intensity;
+  }
+
+  ret->data = std::static_pointer_cast<Data>(point_cloud_data);
   ret->header = toNalioHeader(point_cloud_msg->header);
-  ret->name  = name;
+  ret->name = name;
   ret->type.val = Message::Type::kLidar;
   return ret;
 }

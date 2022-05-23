@@ -7,18 +7,16 @@
 
 namespace nalio {
 
-template <typename PointT>
-struct Feature {
-  using Ptr = std::shared_ptr<Feature>;
-  PointT pt;
+struct FeaturePackage {
+  using Ptr = std::shared_ptr<FeaturePackage>;
 };
 
-template <typename PointIn, typename FeatureT>
+template <typename PointIn, typename FeaturePackage>
 class FeatureExtractor {
  public:
-  virtual int extract(
+  virtual bool extract(
       const typename pcl::PointCloud<PointIn>::ConstPtr& cloud_in,
-      std::vector<FeatureT>* features) = 0;
+      FeaturePackage* features) = 0;
 };
 }  // namespace nalio
 

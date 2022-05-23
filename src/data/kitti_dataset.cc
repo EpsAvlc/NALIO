@@ -18,6 +18,11 @@ bool KITTIDataset::init(bool online) {
   }
 
   buffer_.registerMessage("/velodyne_points", 20);
+
+  std::vector<std::string> topic_names{"/velodyne_points"};
+  std::vector<DataSyncer::SyncType> sync_types{DataSyncer::SyncType::kNearest};
+
+  syncer_ = buffer_.createDataSyncer(topic_names, sync_types);
   return true;
 }
 
