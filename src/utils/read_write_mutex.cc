@@ -4,25 +4,29 @@
 
 namespace nalio {
 
-ReadWriteMutex::ReadWriteMutex() : indicator_(0) {}
+ReadWriteMutex::ReadWriteMutex() : reader_num_(0) {}
 
 void ReadWriteMutex::lockReader() {
-  if (indicator_.load() < 0) {
-    std::this_thread::yield();
+  read_mutex_.lock();
+  ++reader_num_;
+  if (reader_num_ == 1) {
+    write_mutex_.lock();
   }
-  ++indicator_;
+  read_mutex_.unlock();
 }
 
-void ReadWriteMutex::unlockReader() { --indicator_; }
-
-void ReadWriteMutex::lockWriter() {
-  if (indicator_.load() != 0) {
-    std::this_thread::yield();
+void ReadWriteMutex::unlockReader() {
+  read_mutex_.lock();
+  --reader_num_;
+  if (reader_num_ == 0) {
+    write_mutex_.unlock();
   }
-  indicator_.store(-1);
+  read_mutex_.unlock();
 }
 
-void ReadWriteMutex::unlockWriter() { indicator_.store(0); }
+void ReadWriteMutex::lockWriter() { write_mutex_.lock(); }
+
+void ReadWriteMutex::unlockWriter() { write_mutex_.unlock(); }
 
 ReaderLockGuard::ReaderLockGuard(ReadWriteMutex& mutex) : mutex_(mutex) {
   mutex_.lockReader();

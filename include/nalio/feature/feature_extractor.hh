@@ -16,7 +16,7 @@ class FeatureExtractor {
  public:
   virtual bool extract(
       const typename pcl::PointCloud<PointIn>::ConstPtr& cloud_in,
-      FeaturePackage* features) = 0;
+      typename FeaturePackage::Ptr features) = 0;
 };
 }  // namespace nalio
 

@@ -1,0 +1,3 @@
+[submodule "include/UNOS"]
+	path = thirdpary/UNOS
+	url = https://github.com/EpsAvlc/UNOS.git

@@ -26,6 +26,13 @@ struct LOAMFeaturePackage : public FeaturePackage {
         flat_cloud(new pcl::PointCloud<NalioPoint>),
         less_flat_cloud(new pcl::PointCloud<NalioPoint>) {}
 
+  void clear() {
+    sharp_cloud->clear();
+    less_sharp_cloud->clear();
+    flat_cloud->clear();
+    less_flat_cloud->clear();
+  }
+
   pcl::PointCloud<NalioPoint>::Ptr sharp_cloud;
   pcl::PointCloud<NalioPoint>::Ptr less_sharp_cloud;
   pcl::PointCloud<NalioPoint>::Ptr flat_cloud;
@@ -39,7 +46,7 @@ class LOAMFeatureExtractor
  public:
   using PointCloudT = pcl::PointCloud<NalioPoint>;
   bool extract(const PointCloudT::ConstPtr&,
-               LOAMFeaturePackage* features) override;
+               LOAMFeaturePackage::Ptr features) override;
 
  private:
   struct PointInfo {
@@ -62,7 +69,7 @@ class LOAMFeatureExtractor
 
 template <uint16_t N>
 bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
-                                      LOAMFeaturePackage* features) {
+                                      LOAMFeaturePackage::Ptr features) {
   if (!cloud_in) {
     throw(std::invalid_argument("cloud_in is empty."));
   }
@@ -71,12 +78,13 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     throw(std::invalid_argument("features is empty."));
   }
 
+  features->clear();
+
   if (!(0 == splitScans(*cloud_in, &scan_pts_))) {
     ROS_ERROR_STREAM_FUNC("Failed to splitScans");
     return -1;
   }
 
-  tt.tic();
   for (int line = 0; line <= 50; ++line) {
     const PointCloudT& line_pts = scan_pts_[line];
     for (size_t i = 5; i <= line_pts.size() - 6; ++i) {
@@ -103,7 +111,6 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     }
   }
 
-  tt.tic();
   for (int line = 0; line < N; ++line) {
     uint16_t num_line_pts = scan_pts_[line].size();
     if (num_line_pts < 6) {

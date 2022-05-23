@@ -1,11 +1,12 @@
 #ifndef NALIO_DATA_DATAHUB_HH__
 #define NALIO_DATA_DATAHUB_HH__
 
-#include <atomic>
 #include <list>
 #include <map>
 #include <string>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 
 #include "nalio/data/message.hh"
 #include "nalio/utils/read_write_mutex.hh"
@@ -58,6 +59,8 @@ class DataSyncer {
   std::vector<MessageInfo> message_infos_;
   std::vector<std::list<Message::Ptr>::iterator> message_iters_;
   std::thread sync_thread_;
+  std::mutex sync_mutex_;
+  std::condition_variable sync_cv_;
   bool running_;
 };
 

@@ -1,7 +1,7 @@
 #ifndef NALIO_UTILS_SHARED_MUTES__
 #define NALIO_UTILS_SHARED_MUTES__
 
-#include <atomic>
+#include <mutex>
 
 namespace nalio {
 
@@ -15,7 +15,10 @@ class ReadWriteMutex {
   void unlockWriter();
 
  private:
-  std::atomic_int16_t indicator_;
+  // std::atomic_int16_t indicator_;
+  std::mutex read_mutex_;
+  std::mutex write_mutex_;
+  uint16_t reader_num_;
 };
 
 class ReaderLockGuard {

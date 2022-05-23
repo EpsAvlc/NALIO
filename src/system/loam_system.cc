@@ -3,12 +3,23 @@
 #include "nalio/utils/log_utils.hh"
 
 #ifdef NALIO_DEBUG
-#include <pcl_conversions/pcl_conversions.h>
 #include <pcl/console/time.h>
-#include "sensor_msgs/PointCloud2.h"
+#include <pcl_conversions/pcl_conversions.h>
+#include <sensor_msgs/PointCloud2.h>
 #endif
 
 namespace nalio {
+
+LOAMSystem::LOAMSystem()
+    : state_(unos::SO3(), unos::Vec3()), initialized_(false), running_(true) {}
+
+LOAMSystem::~LOAMSystem() {
+  running_ = false;
+  if (update_thread_.joinable()) {
+    feature_package_list_cv_.notify_all();
+    update_thread_.join();
+  }
+}
 
 void LOAMSystem::init() {
 #ifdef NALIO_DEBUG
@@ -21,14 +32,21 @@ void LOAMSystem::init() {
   less_flat_feature_pub_ =
       nh_.advertise<sensor_msgs::PointCloud2>("NALIO/less_flat_feature", 1);
 #endif
+  update_thread_ = std::thread(&LOAMSystem::update, this);
+  initialized_ = true;
 }
 
 void LOAMSystem::stop() {}
 
 void LOAMSystem::feedData(const MessagePackage& msgs) {
-  ROS_INFO_STREAM_FUNC("Feed a message pack. Frame id: " << msgs[0][0]->header.frame_id);
+  if (!initialized_) {
+    ROS_ERROR_STREAM_FUNC(" System has not been initialized.");
+    return;
+  }
+  ROS_INFO_STREAM_FUNC(
+      "Feed a message pack. Frame id: " << msgs[0][0]->header.frame_id);
   propagate();
-  LOAMFeaturePackage feature_package;
+  LOAMFeaturePackage::Ptr feature_package(new LOAMFeaturePackage);
   PointCloudData::Ptr pc_data;
   std::string msg_frame_id;
   for (int mi = 0; mi < msgs.size(); ++mi) {
@@ -38,27 +56,29 @@ void LOAMSystem::feedData(const MessagePackage& msgs) {
       break;
     }
   }
-#ifdef NALIO_DEBUG
+
   pcl::console::TicToc tt;
   tt.tic();
-#endif
-  if (!feature_extractor_.extract(pc_data->point_cloud, &feature_package)) {
+  if (!feature_extractor_.extract(pc_data->point_cloud, feature_package)) {
     ROS_ERROR_STREAM_FUNC("Failed to extract features.");
   }
-#ifdef NALIO_DEBUG
   double fe_time = tt.toc();
   ROS_INFO_STREAM_FUNC("feature extractor elapse time: " << fe_time << "ms.");
-#endif
+
+  feature_package_list_mutex_.lock();
+  feature_package_list_.push(feature_package);
+  feature_package_list_mutex_.unlock();
+  feature_package_list_cv_.notify_all();
 
 #ifdef NALIO_DEBUG
   ROS_INFO_STREAM_FUNC("Feed data.");
 
   sensor_msgs::PointCloud2 flat_pc_msg, less_flat_pc_msg, sharp_pc_msg,
       less_sharp_pc_msg;
-  pcl::toROSMsg(*feature_package.flat_cloud, flat_pc_msg);
-  pcl::toROSMsg(*feature_package.less_flat_cloud, less_flat_pc_msg);
-  pcl::toROSMsg(*feature_package.sharp_cloud, sharp_pc_msg);
-  pcl::toROSMsg(*feature_package.less_sharp_cloud, less_sharp_pc_msg);
+  pcl::toROSMsg(*feature_package->flat_cloud, flat_pc_msg);
+  pcl::toROSMsg(*feature_package->less_flat_cloud, less_flat_pc_msg);
+  pcl::toROSMsg(*feature_package->sharp_cloud, sharp_pc_msg);
+  pcl::toROSMsg(*feature_package->less_sharp_cloud, less_sharp_pc_msg);
 
   flat_pc_msg.header.frame_id = msg_frame_id;
   less_flat_pc_msg.header.frame_id = msg_frame_id;
@@ -70,36 +90,26 @@ void LOAMSystem::feedData(const MessagePackage& msgs) {
   sharp_feature_pub_.publish(sharp_pc_msg);
   less_sharp_feature_pub_.publish(less_sharp_pc_msg);
 #endif
-
-  update();
 }
 
 void LOAMSystem::propagate() {
-  Eigen::Isometry3d propagated_pose = propagator_.propagate();
-  state_.set(eigenToState(propagated_pose));
+  // Eigen::Isometry3d propagated_pose = propagator_.propagate();
+  // state_.set(eigenToState(propagated_pose));
 }
 
-void LOAMSystem::update() {}
+void LOAMSystem::update() {
+  while (running_) {
+    std::unique_lock<std::mutex> lock(feature_package_list_mutex_);
+    while (feature_package_list_.empty() && running_) {
+      feature_package_list_cv_.wait(lock);
+    }
+    ROS_INFO_STREAM_FUNC("enter update.");
+    feature_package_list_.pop();
+  }
+}
 
 Eigen::Isometry3d LOAMSystem::getEstimated() {
-  return stateToEigen(state_.get());
-}
-
-LOAMState::StateT LOAMSystem::eigenToState(const Eigen::Isometry3d& pose) {
-  LOAMState::StateT ret;
-  ret.head<3>() = pose.translation();
-  Eigen::Quaterniond q(pose.linear());
-  ret.tail<4>() = q.coeffs();
-  return ret;
-}
-
-Eigen::Isometry3d LOAMSystem::stateToEigen(const LOAMState::StateT& state) {
-  Eigen::Quaterniond q(&state_.get().data()[3]);
-  Eigen::Vector3d t(state_.get().data());
-  Eigen::Isometry3d ret;
-  ret.linear() = q.toRotationMatrix();
-  ret.translation() = t;
-  return ret;
+  // return stateToEigen(state_.get());
 }
 
 }  // namespace nalio

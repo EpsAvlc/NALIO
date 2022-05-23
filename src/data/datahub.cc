@@ -65,6 +65,10 @@ void DataBuffer::receiveMessage(const Message::Ptr& message) {
     throw(std::logic_error("Disorder messages."));
   }
   message_buffs_[message_id].push_back(message);
+
+  for (size_t si = 0; si < data_syncers_.size(); ++si) {
+    data_syncers_[si]->sync_cv_.notify_all();
+  }
 }
 
 bool DataBuffer::getMessageId(const std::string& message_name,
@@ -143,7 +147,8 @@ DataSyncer::DataSyncer(const std::vector<std::string>& message_names,
 
 DataSyncer::~DataSyncer() {
   running_ = false;
-  while (sync_thread_.joinable()) {
+  if (sync_thread_.joinable()) {
+    sync_cv_.notify_all();
     sync_thread_.join();
   }
 }
@@ -275,8 +280,10 @@ void DataSyncer::syncThread() {
     }
 
     std::vector<std::vector<Message::Ptr>> msgs;
-    while (!getSyncMessages(&msgs)) {
-      std::this_thread::yield();
+    std::unique_lock<std::mutex> lock(sync_mutex_);
+    while (!getSyncMessages(&msgs) && running_) {
+      sync_cv_.wait(lock);
+      // std::this_thread::yield();
     }
     ROS_INFO_STREAM_FUNC(
         "Get a sync message pack."

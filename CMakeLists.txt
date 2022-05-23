@@ -41,6 +41,7 @@ catkin_package(
 
 include_directories(
   include
+  thirdparty/UNOS/include
   ${catkin_INCLUDE_DIRS}
 	${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
@@ -64,12 +65,6 @@ add_library(${PROJECT_NAME}_param
 )
 target_link_libraries(${PROJECT_NAME}_param
   ${catkin_LIBRARIES}
-)
-
-add_library(${PROJECT_NAME}_state
-  src/state/loam_state.cc
-)
-target_link_libraries(${PROJECT_NAME}_state
 )
 
 add_library(${PROJECT_NAME}_feature
@@ -113,7 +108,6 @@ target_link_libraries(${PROJECT_NAME}_pipeline
   ${PROJECT_NAME}_utils
   ${PROJECT_NAME}_system
   ${PROJECT_NAME}_data
-  ${PROJECT_NAME}_state
 )
 
 # add_executable(feature_extraction
@@ -139,7 +133,6 @@ catkin_add_gtest(${PROJECT_NAME}_test
   tests/tests.cc
 )
 target_link_libraries(${PROJECT_NAME}_test
-  ${PROJECT_NAME}_state
   ${PROJECT_NAME}_propagator
   ${PROJECT_NAME}_data
   ${PROJECT_NAME}_system
