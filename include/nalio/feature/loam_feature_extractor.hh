@@ -51,8 +51,8 @@ class LOAMFeatureExtractor
  private:
   struct PointInfo {
     float curvature;
-    bool neighbor_selected;  // 是否其邻居点已被选作Feature点
-    uint16_t ind;            // 原本的下标
+    bool neighbor_selected;  
+    uint16_t ind;
   };
 
   int splitScans(const PointCloudT& cloud_in,
@@ -147,7 +147,6 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
           float diff_x = scan_pts_[line][j].x - scan_pts_[line][pt_ind].x;
           float diff_y = scan_pts_[line][j].y - scan_pts_[line][pt_ind].y;
           float diff_z = scan_pts_[line][j].z - scan_pts_[line][pt_ind].z;
-          // 将离当前点sqrt 0.05m内的点排除，防止特征点过于密集
           if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z > 0.05) {
             break;
           }
@@ -170,7 +169,6 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
           float diff_x = scan_pts_[line][j].x - scan_pts_[line][pt_ind].x;
           float diff_y = scan_pts_[line][j].y - scan_pts_[line][pt_ind].y;
           float diff_z = scan_pts_[line][j].z - scan_pts_[line][pt_ind].z;
-          // 将离当前点sqrt 0.05m内的点排除，防止特征点过于密集
           if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z >= 0.05) {
             continue;
           }
@@ -192,7 +190,7 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     pcl::VoxelGrid<NalioPoint> ds_filter;
     ds_filter.setInputCloud(less_flat_cloud_tmp);
     ds_filter.setLeafSize(0.2, 0.2, 0.2);
-    ds_filter.filter(less_flat_cloud_ds); // TODO: elapse too much time here.
+    ds_filter.filter(less_flat_cloud_ds); 
     *features->less_flat_cloud += less_flat_cloud_ds;
   }
 

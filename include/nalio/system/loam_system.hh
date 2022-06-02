@@ -15,7 +15,9 @@
 #include "nalio/propagator/linear_propagator.hh"
 #include "nalio/system/system.hh"
 
+#ifdef USE_UNOS
 #include "unos/manifold/manifold.hh"
+#endif
 
 namespace nalio {
 class LOAMSystem final : public System {
@@ -38,7 +40,12 @@ class LOAMSystem final : public System {
 
   LinearPropagator propagator_;
   LOAMFeatureExtractor<64> feature_extractor_;
+#ifdef USE_UNOS
   unos::Manifold state_;
+#else
+  
+#endif
+  
   bool initialized_, running_;
   std::queue<LOAMFeaturePackage::Ptr> feature_package_list_;
   std::condition_variable feature_package_list_cv_;
