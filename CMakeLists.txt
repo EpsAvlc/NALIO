@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(nalio)
 
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++17)
 set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 # -g 包含调试信息 
 # -Wall 启动所有的 warning
