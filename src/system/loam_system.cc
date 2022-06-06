@@ -261,7 +261,38 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   }
 
 #ifdef NALIO_DEBUG
+  visualization_msgs::Marker line_list;
+  line_list.header.frame_id = "map";
+  line_list.header.stamp = ros::Time::now();
+  line_list.action = visualization_msgs::Marker::ADD;
+  line_list.id = 2;
+  line_list.type = visualization_msgs::Marker::LINE_LIST;
+  line_list.ns = "lines";
+  line_list.scale.x = 0.15;
+  line_list.scale.y = 0.15;
+  line_list.scale.z = 0.15;
+  line_list.color.r = 1;
+  line_list.color.g = 0;
+  line_list.color.b = 0;
+  line_list.color.a = 1;
 
+  for (size_t ei = 0; ei < edge_pairs->size(); ++ei) {
+    geometry_msgs::Point ori_pt;
+    ori_pt.x = (*edge_pairs)[ei].ori_pt.x;
+    ori_pt.y = (*edge_pairs)[ei].ori_pt.x;
+    ori_pt.z = (*edge_pairs)[ei].ori_pt.x;
+
+    for (size_t ni = 0; ni < edge_pairs->size(); ++ni) {
+      geometry_msgs::Point neigh_pt;
+      neigh_pt.x = (*edge_pairs)[ei].neigh_pt[ni].x;
+      neigh_pt.y = (*edge_pairs)[ei].neigh_pt[ni].y;
+      neigh_pt.z = (*edge_pairs)[ei].neigh_pt[ni].z;
+
+      line_list.points.push_back(ori_pt);
+      line_list.points.push_back(neigh_pt);
+    }
+  }
+  associate_pub_.publish(line_list);
 #endif
 }
 
