@@ -5,6 +5,6 @@
     </group>
     <group unless="$(arg debug)">
         <node name="nalio_pipeline" pkg="nalio" type="nalio_pipeline" output="screen"/> 
-        <!-- <node pkg="rviz" type="rviz" name="rviz_nalio" args="-d $(find nalio)/rviz/demo.rviz"/> -->
+        <node pkg="rviz" type="rviz" name="rviz_nalio" args="-d $(find nalio)/rviz/demo.rviz"/>
     </group>
 </launch>

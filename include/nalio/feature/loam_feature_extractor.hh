@@ -129,18 +129,18 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
                 [](const PointInfo& lhs, const PointInfo& rhs) {
                   return lhs.curvature < rhs.curvature;
                 });
-
+      int sharp_feature_num = 0;
       for (int pi = ep; pi >= sp; --pi) {
         uint16_t& pt_ind = point_infos_[line][pi].ind;
         if (neighbor_selected.count(pt_ind) > 0) {
           continue;
         }
-        if (features->sharp_cloud->size() < kMaxSharpPts) {
+        if (sharp_feature_num < kMaxSharpPts) {
           features->sharp_cloud->push_back(scan_pts_[line][pt_ind]);
         }
         features->less_sharp_cloud->push_back(scan_pts_[line][pt_ind]);
 
-        if (features->less_sharp_cloud->size() >= kMaxLessSharpPts) {
+        if (sharp_feature_num >= kMaxLessSharpPts) {
           break;
         }
         for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
@@ -153,14 +153,16 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
           neighbor_selected.insert(j);
         }
         edge_inds.insert(pt_ind);
+        ++sharp_feature_num;
       }
 
+      int flat_feature_num = 0;
       for (int pi = sp; pi <= ep; ++pi) {
         uint16_t& pt_ind = point_infos_[line][pi].ind;
         if (neighbor_selected.count(pt_ind) > 0) {
           continue;
         }
-        if (features->flat_cloud->size() < kMaxFlatPts) {
+        if (flat_feature_num < kMaxFlatPts) {
           features->flat_cloud->push_back(scan_pts_[line][pt_ind]);
         } else {
           break;
@@ -174,6 +176,7 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
           }
           neighbor_selected.insert(j);
         }
+        ++flat_feature_num;
       }
 
       for (int i = sp; i <= ep; ++i) {

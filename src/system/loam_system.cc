@@ -1,10 +1,10 @@
 #include "nalio/system/loam_system.hh"
 
+#include <pcl/kdtree/kdtree_flann.h>
 #include "nalio/utils/log_utils.hh"
 
 #ifdef NALIO_DEBUG
 #include <pcl/console/time.h>
-#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/Marker.h>
@@ -84,6 +84,8 @@ void LOAMSystem::feedData(const MessagePackage& msgs) {
   }
   double fe_time = tt.toc();
   ROS_INFO_STREAM_FUNC("feature extractor elapse time: " << fe_time << "ms.");
+  ROS_INFO_STREAM_FUNC("sharp feature size: " << feature_package->sharp_cloud->size());
+  ROS_INFO_STREAM_FUNC("flat feature size: " << feature_package->flat_cloud->size());
 
   feature_package_list_mutex_.lock();
   feature_package_list_.push(feature_package);
@@ -175,7 +177,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       }
     }
 
-    for (size_t ej = pt_search_inds[0] - 1; ej > 0; --ej) {
+    for (int32_t ej = pt_search_inds[0] - 1; ej > 0; --ej) {
       if ((*prev_feature->less_sharp_cloud)[ej].line >= closest_pt.line) {
         continue;
       }
@@ -204,7 +206,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
     }
   }
 
-  static pcl::KdTreeFLANN<PointT, PointT> plane_kdtree;
+  static pcl::KdTreeFLANN<PointT> plane_kdtree;
   plane_kdtree.setInputCloud(prev_feature->less_flat_cloud);
   for (size_t pi = 0; pi < curr_feature->flat_cloud->size(); ++pi) {
     const PointT& pt_sel = curr_feature->flat_cloud->at(pi);
@@ -233,7 +235,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       }
     }
 
-    for (size_t pj = pt_search_inds[0] - 1; pj > 0; --pj) {
+    for (int32_t pj = pt_search_inds[0] - 1; pj > 0; --pj) {
       if ((*prev_feature->less_flat_cloud)[pj].line >= closest_pt.line) {
         continue;
       }
@@ -262,7 +264,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
 
 #ifdef NALIO_DEBUG
   visualization_msgs::Marker line_list;
-  line_list.header.frame_id = "map";
+  line_list.header.frame_id = "camera_init";
   line_list.header.stamp = ros::Time::now();
   line_list.action = visualization_msgs::Marker::ADD;
   line_list.id = 2;
