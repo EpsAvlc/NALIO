@@ -11,7 +11,7 @@
 #include <pcl/point_types.h>
 #include <ros/console.h>
 
-#include "nalio/data/data.hh"
+#include "nalio/data/nalio_data.hh"
 #include "nalio/feature/feature_extractor.hh"
 #include "nalio/utils/log_utils.hh"
 

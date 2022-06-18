@@ -1,13 +1,14 @@
-#ifndef NALIO_DATA_DATA_HH__
-#define NALIO_DATA_DATA_HH__
+#ifndef NALIO_DATA_NALIO_DATA_HH__
+#define NALIO_DATA_NALIO_DATA_HH__
 
 #include <memory>
 #include <vector>
 
-#define PCL_NO_PRECOMPILE
 #include <pcl/pcl_macros.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+
+#include "datahub/data.hh"
 
 struct NalioPoint {
   PCL_ADD_POINT4D;  // preferred way of adding a XYZ+padding
@@ -24,19 +25,15 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(
 
 namespace nalio {
 
-struct Data {
-  using Ptr = std::shared_ptr<Data>;
-  virtual ~Data() {}
-};
-
-struct IMUData : public Data {
+struct IMUData : public datahub::Data {
+  using Ptr = std::shared_ptr<IMUData>;
   //* angular velocity;
   Eigen::Vector3d w;
   //* linear velocity;
   Eigen::Vector3d a;
 };
 
-struct PointCloudData : public Data {
+struct PointCloudData : public datahub::Data {
   using Ptr = std::shared_ptr<PointCloudData>;
   pcl::PointCloud<NalioPoint>::Ptr point_cloud;
 };

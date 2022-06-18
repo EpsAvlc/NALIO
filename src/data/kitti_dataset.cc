@@ -20,14 +20,15 @@ bool KITTIDataset::init(bool online) {
   buffer_.registerMessage("/velodyne_points", 20);
 
   std::vector<std::string> topic_names{"/velodyne_points"};
-  std::vector<DataSyncer::SyncType> sync_types{DataSyncer::SyncType::kNearest};
+  std::vector<datahub::DataSyncer::SyncType> sync_types{
+      datahub::DataSyncer::SyncType::kNearest};
 
   syncer_ = buffer_.createDataSyncer(topic_names, sync_types);
   return true;
 }
 
 void KITTIDataset::lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
-  Message::Ptr lidar_msg = toNalioMessage(msg, "/velodyne_points");
+  datahub::Message::Ptr lidar_msg = nalio::toDatahubMessage(msg, "/velodyne_points");
   buffer_.receiveMessage(lidar_msg);
 }
 

@@ -7,7 +7,7 @@
 nalio::System::Ptr system_ptr;
 nalio::Dataset::Ptr dataset_ptr;
 
-void dataCallback(const nalio::MessagePackage& package) {
+void dataCallback(const datahub::MessagePackage& package) {
   ROS_INFO_STREAM_FUNC("enter pipeline data cb");
   system_ptr->feedData(package);
 }

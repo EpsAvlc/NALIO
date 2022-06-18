@@ -7,9 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "nalio/data/data.hh"
-#include "nalio/data/datahub.hh"
-#include "nalio/data/message.hh"
+#include "datahub/datahub.hh"
 
 namespace nalio {
 
@@ -18,7 +16,7 @@ class Dataset {
   using Ptr = std::shared_ptr<Dataset>;
   Dataset() {}
   virtual bool init(bool online) { return false; }
-  void registerCallback(const NalioCallback& cb) {
+  void registerCallback(const datahub::DatahubCallback& cb) {
     syncer_->registerCallback(cb);
   }
 
@@ -26,8 +24,8 @@ class Dataset {
 
  protected:
   bool online_;
-  DataBuffer buffer_;
-  DataSyncer::Ptr syncer_;
+  datahub::DataBuffer buffer_;
+  datahub::DataSyncer::Ptr syncer_;
 };
 }  // namespace nalio
 

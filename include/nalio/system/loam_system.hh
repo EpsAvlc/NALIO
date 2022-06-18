@@ -12,11 +12,12 @@
 
 #include <Eigen/Geometry>
 
-#include "nalio/data/message.hh"
-#include "nalio/factory/factory.hh"
+#define PCL_NO_PRECOMPILE
+#include "datahub/datahub.hh"
 #include "nalio/feature/loam_feature_extractor.hh"
 #include "nalio/propagator/linear_propagator.hh"
 #include "nalio/system/system.hh"
+#include "nalio/factory/factory.hh"
 
 #ifdef USE_UNOS
 #include "unos/manifold/manifold.hh"
@@ -34,7 +35,7 @@ class LOAMSystem final : public System {
 
   void init() override;
   void stop() override;
-  void feedData(const MessagePackage& data);
+  void feedData(const datahub::MessagePackage& data);
 
  private:
   struct EdgePair {

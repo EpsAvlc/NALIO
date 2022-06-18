@@ -1,18 +1,17 @@
 #include "nalio/data/data_converter.hh"
+#include "nalio/data/nalio_data.hh"
 
 #include <pcl_conversions/pcl_conversions.h>
 
 namespace nalio {
-nalio::Header toNalioHeader(const std_msgs::Header& ros_header) {
-  nalio::Header nalio_header;
-  nalio_header.frame_id = ros_header.frame_id;
-  nalio_header.timestamp = ros_header.stamp.toNSec() / 1000;
-  return nalio_header;
+void toDatahubHeader(const std_msgs::Header& ros_header, datahub::Header *std_header) {
+  std_header->frame_id = ros_header.frame_id;
+  std_header->timestamp = ros_header.stamp.toNSec() / 1000;
 }
 
-std::shared_ptr<nalio::Message> toNalioMessage(
+std::shared_ptr<datahub::Message> toDatahubMessage(
     const sensor_msgs::ImuConstPtr& imu_msg, const std::string& name) {
-  std::shared_ptr<Message> ret(new Message);
+  std::shared_ptr<datahub::Message> ret(new datahub::Message);
   std::shared_ptr<IMUData> imu_data(new IMUData);
   imu_data->w.x() = imu_msg->angular_velocity.x;
   imu_data->w.y() = imu_msg->angular_velocity.y;
@@ -21,16 +20,16 @@ std::shared_ptr<nalio::Message> toNalioMessage(
   imu_data->a.y() = imu_msg->linear_acceleration.y;
   imu_data->a.z() = imu_msg->linear_acceleration.z;
   ret->data = imu_data;
-  ret->header = toNalioHeader(imu_msg->header);
+  toDatahubHeader(imu_msg->header, &ret->header);
   ret->name = name;
-  ret->type.val = Message::Type::kImu;
+  ret->type.val = datahub::Message::Type::kImu;
   return ret;
 }
 
-std::shared_ptr<nalio::Message> toNalioMessage(
+std::shared_ptr<datahub::Message> toDatahubMessage(
     const sensor_msgs::PointCloud2ConstPtr& point_cloud_msg,
     const std::string& name) {
-  std::shared_ptr<Message> ret(new Message);
+  std::shared_ptr<datahub::Message> ret(new datahub::Message);
   std::shared_ptr<PointCloudData> point_cloud_data(new PointCloudData);
   point_cloud_data->point_cloud.reset(new pcl::PointCloud<NalioPoint>);
 
@@ -44,11 +43,11 @@ std::shared_ptr<nalio::Message> toNalioMessage(
     (*point_cloud_data->point_cloud)[pi].intensity = ori_pc[pi].intensity;
   }
 
-  ret->data = std::static_pointer_cast<Data>(point_cloud_data);
-  ret->header = toNalioHeader(point_cloud_msg->header);
+  ret->data = std::static_pointer_cast<datahub::Data>(point_cloud_data);
+  toDatahubHeader(point_cloud_msg->header, &ret->header);
   ret->name = name;
-  ret->type.val = Message::Type::kLidar;
+  ret->type.val = datahub::Message::Type::kLidar;
   return ret;
 }
 
-}  // namespace nalio
+}  // namespace datahub

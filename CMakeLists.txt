@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   cv_bridge
   tf
+  datahub
 )
 
 # see here: https://github.com/PointCloudLibrary/pcl/issues/3680
@@ -60,6 +61,15 @@ target_link_libraries(${PROJECT_NAME}_utils
   ${catkin_LIBRARIES}
 )
 
+add_library(${PROJECT_NAME}_data
+  src/data/kitti_dataset.cc
+  src/data/data_converter.cc
+)
+target_link_libraries(${PROJECT_NAME}_data
+	${PCL_LIBRARIES}
+  ${catkin_LIBRARIES}
+)
+
 add_library(${PROJECT_NAME}_param
   src/param/param_server.cc
 )
@@ -89,16 +99,6 @@ target_link_libraries(${PROJECT_NAME}_system
   ${PROJECT_NAME}_propagator
 )
 
-
-add_library(${PROJECT_NAME}_data
-  src/data/kitti_dataset.cc
-  src/data/datahub.cc
-  src/data/data_converter.cc
-)
-target_link_libraries(${PROJECT_NAME}_data
-	${PCL_LIBRARIES}
-  ${catkin_LIBRARIES}
-)
 ####################### Nodes ####################
 add_executable(${PROJECT_NAME}_pipeline
   src/nalio_pipeline.cc

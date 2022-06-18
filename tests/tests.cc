@@ -2,7 +2,7 @@
 #include <chrono>
 #include <thread>
 
-#include "nalio/data/datahub.hh"
+#include "datahub/datahub.hh"
 #include "nalio/factory/factory.hh"
 #include "nalio/propagator/linear_propagator.hh"
 

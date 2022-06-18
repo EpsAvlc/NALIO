@@ -10,6 +10,8 @@
 #include <visualization_msgs/Marker.h>
 #endif
 
+#include "nalio/data/nalio_data.hh"
+
 namespace nalio {
 
 LOAMSystem::LOAMSystem()
@@ -58,7 +60,7 @@ void LOAMSystem::init() {
 
 void LOAMSystem::stop() {}
 
-void LOAMSystem::feedData(const MessagePackage& msgs) {
+void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
   if (!initialized_) {
     ROS_ERROR_STREAM_FUNC(" System has not been initialized.");
     return;
@@ -70,7 +72,7 @@ void LOAMSystem::feedData(const MessagePackage& msgs) {
   PointCloudData::Ptr pc_data;
   std::string msg_frame_id;
   for (int mi = 0; mi < msgs.size(); ++mi) {
-    if (msgs[mi][0]->type.val == Message::Type::kLidar) {
+    if (msgs[mi][0]->type.val == datahub::Message::Type::kLidar) {
       pc_data = std::dynamic_pointer_cast<PointCloudData>(msgs[mi][0]->data);
       msg_frame_id = msgs[mi][0]->header.frame_id;
       break;

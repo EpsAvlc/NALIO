@@ -5,14 +5,14 @@
 #include <Eigen/Geometry>
 #include <memory>
 
-#include "nalio/data/message.hh"
+#include "datahub/message.hh"
 
 namespace nalio {
 class System {
  public:
   using Ptr = std::unique_ptr<System>;
   virtual void init(){};
-  virtual void feedData(const MessagePackage& data){};
+  virtual void feedData(const datahub::MessagePackage& data){};
   virtual void stop(){};
 
  protected:

@@ -7,9 +7,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 
-#include "nalio/data/datahub.hh"
 #include "nalio/data/dataset.hh"
-#include "nalio/data/message.hh"
 #include "nalio/factory/factory.hh"
 #include "nalio/param/param_server.hh"
 
