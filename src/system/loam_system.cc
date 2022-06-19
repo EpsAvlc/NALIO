@@ -43,15 +43,13 @@ void LOAMSystem::init() {
       nh_.advertise<sensor_msgs::PointCloud2>("NALIO/less_flat_feature", 1);
   associate_pub_ =
       nh_.advertise<visualization_msgs::MarkerArray>("NALIO/associate", 1);
+  path_pub_ = nh_.advertise<nav_msgs::Path>("NALIO/Odometry", 1);
 #endif
 
 #ifdef USE_UNOS
   throw(std::logic_error("not implement yet."));
 #else
-  for (size_t i = 0; i < 7; ++i) {
-    last_to_curr_[i] = 0;
-  }
-  last_to_curr_[6] = 1;
+  state_.setIdentity();
 #endif
 
   update_thread_ = std::thread(&LOAMSystem::update, this);
@@ -137,6 +135,7 @@ void LOAMSystem::update() {
       std::vector<LOAMPlanePair> plane_pairs;
       associate(prev_feature_package, curr_feature_package, &edge_pairs,
                 &plane_pairs);
+      optimize(edge_pairs, plane_pairs);
     }
     prev_feature_package = curr_feature_package;
     feature_package_list_.pop();
@@ -147,7 +146,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
                            const LOAMFeaturePackage::Ptr& curr_feature,
                            std::vector<LOAMEdgePair>* edge_pairs,
                            std::vector<LOAMPlanePair>* plane_pairs) {
-  const double kMaxAssociateDistanceSq = 25;
+  const double kMaxAssociateDistanceSq = 9;
   if (!edge_pairs || !plane_pairs) {
     throw(std::invalid_argument("edge_pairs or plane_pairs is nullptr!"));
   }
@@ -221,7 +220,8 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
 
   static pcl::KdTreeFLANN<PointT> plane_kdtree;
   plane_kdtree.setInputCloud(prev_feature->less_flat_cloud);
-  ROS_INFO_STREAM_FUNC("Current flat cloud size: " << curr_feature->flat_cloud->size());
+  ROS_INFO_STREAM_FUNC(
+      "Current flat cloud size: " << curr_feature->flat_cloud->size());
   for (size_t pi = 0; pi < curr_feature->flat_cloud->size(); ++pi) {
     const PointT& pt_sel = curr_feature->flat_cloud->at(pi);
     plane_kdtree.nearestKSearch(pt_sel, 1, pt_search_inds, pt_search_dists);
@@ -349,6 +349,66 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   associate_marker_array.markers.push_back(plane_line_list);
   associate_pub_.publish(associate_marker_array);
 #endif
+}
+
+bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
+                          const std::vector<LOAMPlanePair>& plane_pair) {
+#ifdef USE_UNOS
+  throw(std::logic_error("Has not been implemented."));
+#else
+  double curr2last_data_t[3]{0, 0, 0};
+  double curr2last_data_q[4]{0, 0, 0, 1};
+  ceres::Problem::Options problem_options;
+  ceres::Problem problem(problem_options);
+  ceres::EigenQuaternionManifold* q_manifold =
+      new ceres::EigenQuaternionManifold;
+  problem.AddParameterBlock(curr2last_data_q, 4, q_manifold);
+  problem.AddParameterBlock(curr2last_data_t, 3);
+  ceres::LossFunction* loss_function = new ceres::HuberLoss(0.1);
+  for (size_t ei = 0; ei < edge_pair.size(); ++ei) {
+    ceres::CostFunction* edge_factor = LOAMEdgeFactor::Create(edge_pair[ei]);
+    problem.AddResidualBlock(edge_factor, loss_function, curr2last_data_q,
+                             curr2last_data_t);
+  }
+
+  ceres::Solver::Options options;
+  options.linear_solver_type = ceres::DENSE_QR;
+  options.max_num_iterations = 4;
+  options.minimizer_progress_to_stdout = false;
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+
+  Eigen::Map<Eigen::Vector3d> curr2last_t(curr2last_data_t);
+  Eigen::Map<Eigen::Quaterniond> curr2last_q(curr2last_data_q);
+
+  state_.translation() = state_.translation() + state_.rotation() * curr2last_t;
+  state_.linear() = state_.rotation() * curr2last_q;
+#endif
+
+#ifdef NALIO_DEBUG
+  Eigen::Isometry3d curr_pose_in_map;
+#ifdef USE_UNOS
+  throw(std::logic_error("Has not been implemented."));
+#else
+  curr_pose_in_map = state_;
+#endif
+  // ROS_INFO_STREAM_FUNC("Current state: " << std::endl
+  //                                        << curr_pose_in_map.matrix());
+  path_msg_.header.frame_id = "map";
+  path_msg_.header.stamp = ros::Time::now();
+  geometry_msgs::PoseStamped pose;
+  pose.pose.position.x = curr_pose_in_map.translation().x();
+  pose.pose.position.y = curr_pose_in_map.translation().y();
+  pose.pose.position.z = curr_pose_in_map.translation().z();
+  Eigen::Quaterniond curr_q(curr_pose_in_map.linear());
+  pose.pose.orientation.w = curr_q.w();
+  pose.pose.orientation.x = curr_q.x();
+  pose.pose.orientation.y = curr_q.y();
+  pose.pose.orientation.z = curr_q.z();
+  path_msg_.poses.push_back(pose);
+  path_pub_.publish(path_msg_);
+#endif
+  return true;
 }
 
 Eigen::Isometry3d LOAMSystem::getEstimated() {

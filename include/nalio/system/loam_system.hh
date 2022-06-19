@@ -3,6 +3,7 @@
 
 #ifdef NALIO_DEBUG
 #include <ros/ros.h>
+#include <nav_msgs/Path.h>
 #endif
 
 #include <condition_variable>
@@ -46,6 +47,7 @@ class LOAMSystem final : public System {
                  const LOAMFeaturePackage::Ptr& curr_feature,
                  std::vector<LOAMEdgePair>* edge_pairs,
                  std::vector<LOAMPlanePair>* plane_pairs);
+  bool optimize(const std::vector<LOAMEdgePair>& edge_pair, const std::vector<LOAMPlanePair>& plane_pair);
 
   Eigen::Isometry3d getEstimated() override;
 
@@ -54,8 +56,8 @@ class LOAMSystem final : public System {
 #ifdef USE_UNOS
   unos::Manifold state_;
 #else
-  // x, y, z, qx, qy, qz, qw
-  double last_to_curr_[7];
+  // qx, qy, qz, qw, x, y, z
+  Eigen::Isometry3d state_;
 #endif
 
   bool initialized_, running_;
@@ -76,6 +78,8 @@ class LOAMSystem final : public System {
   ros::Publisher flat_feature_pub_;
   ros::Publisher less_flat_feature_pub_;
   ros::Publisher associate_pub_;
+  ros::Publisher path_pub_;
+  nav_msgs::Path path_msg_;
 #endif
 };
 

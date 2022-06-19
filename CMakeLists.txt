@@ -33,6 +33,7 @@ endif()
 
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(Ceres REQUIRED)
 
 catkin_package(
 #  INCLUDE_DIRS include
@@ -97,6 +98,7 @@ add_library(${PROJECT_NAME}_system
 )
 target_link_libraries(${PROJECT_NAME}_system
 	${PCL_LIBRARIES}
+	${CERES_LIBRARIES}
   ${PROJECT_NAME}_propagator
 )
 
