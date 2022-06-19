@@ -51,7 +51,7 @@ class LOAMFeatureExtractor
  private:
   struct PointInfo {
     float curvature;
-    bool neighbor_selected;  
+    bool neighbor_selected;
     uint16_t ind;
   };
 
@@ -188,15 +188,19 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
       }
     }
 
-    //printf("downsample point size %ld \n", less_flat_cloud_tmp->size());
+    // printf("downsample point size %ld \n", less_flat_cloud_tmp->size());
     pcl::PointCloud<NalioPoint> less_flat_cloud_ds;
     pcl::VoxelGrid<NalioPoint> ds_filter;
     ds_filter.setInputCloud(less_flat_cloud_tmp);
     ds_filter.setLeafSize(0.2, 0.2, 0.2);
-    ds_filter.filter(less_flat_cloud_ds); 
+    ds_filter.filter(less_flat_cloud_ds);
     *features->less_flat_cloud += less_flat_cloud_ds;
   }
 
+  // for (int i = 0; i < features->less_flat_cloud->size(); ++i) {
+  //   ROS_INFO_STREAM_FUNC(
+  //       "feature line: " << features->less_flat_cloud->at(i).line);
+  // }
   return true;
 }
 

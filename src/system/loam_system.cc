@@ -7,7 +7,7 @@
 #include <pcl/console/time.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #endif
 
 #include "nalio/data/nalio_data.hh"
@@ -42,7 +42,7 @@ void LOAMSystem::init() {
   less_flat_feature_pub_ =
       nh_.advertise<sensor_msgs::PointCloud2>("NALIO/less_flat_feature", 1);
   associate_pub_ =
-      nh_.advertise<visualization_msgs::Marker>("NALIO/associate", 1);
+      nh_.advertise<visualization_msgs::MarkerArray>("NALIO/associate", 1);
 #endif
 
 #ifdef USE_UNOS
@@ -86,8 +86,10 @@ void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
   }
   double fe_time = tt.toc();
   ROS_INFO_STREAM_FUNC("feature extractor elapse time: " << fe_time << "ms.");
-  ROS_INFO_STREAM_FUNC("sharp feature size: " << feature_package->sharp_cloud->size());
-  ROS_INFO_STREAM_FUNC("flat feature size: " << feature_package->flat_cloud->size());
+  ROS_INFO_STREAM_FUNC(
+      "sharp feature size: " << feature_package->sharp_cloud->size());
+  ROS_INFO_STREAM_FUNC(
+      "flat feature size: " << feature_package->flat_cloud->size());
 
   feature_package_list_mutex_.lock();
   feature_package_list_.push(feature_package);
@@ -145,6 +147,12 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
                            const LOAMFeaturePackage::Ptr& curr_feature,
                            std::vector<EdgePair>* edge_pairs,
                            std::vector<PlanePair>* plane_pairs) {
+  const double kMaxAssociateDistanceSq = 25;
+  if (!edge_pairs || !plane_pairs) {
+    throw(std::invalid_argument("edge_pairs or plane_pairs is nullptr!"));
+  }
+  edge_pairs->clear();
+  plane_pairs->clear();
   //* Edge feature association.
   static pcl::KdTreeFLANN<PointT> edge_kdtree;
   edge_kdtree.setInputCloud(prev_feature->less_sharp_cloud);
@@ -154,10 +162,13 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
     const PointT& pt_sel = curr_feature->sharp_cloud->at(ei);
 
     edge_kdtree.nearestKSearch(pt_sel, 1, pt_search_inds, pt_search_dists);
+    if (pt_search_dists[0] > kMaxAssociateDistanceSq) {
+      continue;
+    }
     const PointT& closest_pt =
         (*prev_feature->less_sharp_cloud)[pt_search_inds[0]];
     int second_closest_pt_ind = -1;
-    double second_closest_pt_dist = std::numeric_limits<double>::max();
+    double second_closest_pt_dist = kMaxAssociateDistanceSq;
     for (size_t ej = pt_search_inds[0] + 1;
          ej < prev_feature->less_sharp_cloud->size(); ++ej) {
       if ((*prev_feature->less_sharp_cloud)[ej].line <= closest_pt.line) {
@@ -210,14 +221,19 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
 
   static pcl::KdTreeFLANN<PointT> plane_kdtree;
   plane_kdtree.setInputCloud(prev_feature->less_flat_cloud);
+  ROS_INFO_STREAM_FUNC("Current flat cloud size: " << curr_feature->flat_cloud->size());
   for (size_t pi = 0; pi < curr_feature->flat_cloud->size(); ++pi) {
     const PointT& pt_sel = curr_feature->flat_cloud->at(pi);
     plane_kdtree.nearestKSearch(pt_sel, 1, pt_search_inds, pt_search_dists);
+    if (pt_search_dists[0] > kMaxAssociateDistanceSq) {
+      continue;
+    }
+
     const PointT& closest_pt =
         (*prev_feature->less_flat_cloud)[pt_search_inds[0]];
     int l_ind = -1, m_ind = -1;
-    double l_distance = std::numeric_limits<double>::max();
-    double m_distance = std::numeric_limits<double>::max();
+    double l_distance = kMaxAssociateDistanceSq;
+    double m_distance = kMaxAssociateDistanceSq;
 
     for (size_t pj = pt_search_inds[0] + 1;
          pj < prev_feature->less_flat_cloud->size(); ++pj) {
@@ -237,7 +253,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       }
     }
 
-    for (int32_t pj = pt_search_inds[0] - 1; pj > 0; --pj) {
+    for (int32_t pj = pt_search_inds[0] - 1; pj >= 0; --pj) {
       if ((*prev_feature->less_flat_cloud)[pj].line >= closest_pt.line) {
         continue;
       }
@@ -265,38 +281,73 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   }
 
 #ifdef NALIO_DEBUG
-  visualization_msgs::Marker line_list;
-  line_list.header.frame_id = "camera_init";
-  line_list.header.stamp = ros::Time::now();
-  line_list.action = visualization_msgs::Marker::ADD;
-  line_list.id = 2;
-  line_list.type = visualization_msgs::Marker::LINE_LIST;
-  line_list.ns = "lines";
-  line_list.scale.x = 0.15;
-  line_list.scale.y = 0.15;
-  line_list.scale.z = 0.15;
-  line_list.color.r = 1;
-  line_list.color.g = 0;
-  line_list.color.b = 0;
-  line_list.color.a = 1;
+  visualization_msgs::MarkerArray associate_marker_array;
+  visualization_msgs::Marker edge_line_list, plane_line_list;
+  edge_line_list.header.frame_id = "camera_init";
+  edge_line_list.header.stamp = ros::Time::now();
+  edge_line_list.action = visualization_msgs::Marker::ADD;
+  edge_line_list.id = 1;
+  edge_line_list.type = visualization_msgs::Marker::LINE_LIST;
+  edge_line_list.ns = "edge_lines";
+  edge_line_list.scale.x = 0.15;
+  edge_line_list.scale.y = 0.15;
+  edge_line_list.scale.z = 0.15;
+  edge_line_list.color.r = 1;
+  edge_line_list.color.g = 0;
+  edge_line_list.color.b = 0;
+  edge_line_list.color.a = 1;
+  edge_line_list.pose.orientation.w = 1;
 
   for (size_t ei = 0; ei < edge_pairs->size(); ++ei) {
     geometry_msgs::Point ori_pt;
     ori_pt.x = (*edge_pairs)[ei].ori_pt.x;
-    ori_pt.y = (*edge_pairs)[ei].ori_pt.x;
-    ori_pt.z = (*edge_pairs)[ei].ori_pt.x;
+    ori_pt.y = (*edge_pairs)[ei].ori_pt.y;
+    ori_pt.z = (*edge_pairs)[ei].ori_pt.z;
 
-    for (size_t ni = 0; ni < edge_pairs->size(); ++ni) {
+    for (size_t ni = 0; ni < 2; ++ni) {
       geometry_msgs::Point neigh_pt;
       neigh_pt.x = (*edge_pairs)[ei].neigh_pt[ni].x;
       neigh_pt.y = (*edge_pairs)[ei].neigh_pt[ni].y;
       neigh_pt.z = (*edge_pairs)[ei].neigh_pt[ni].z;
 
-      line_list.points.push_back(ori_pt);
-      line_list.points.push_back(neigh_pt);
+      edge_line_list.points.push_back(ori_pt);
+      edge_line_list.points.push_back(std::move(neigh_pt));
     }
   }
-  associate_pub_.publish(line_list);
+  associate_marker_array.markers.push_back(edge_line_list);
+
+  plane_line_list.header.frame_id = "camera_init";
+  plane_line_list.header.stamp = ros::Time::now();
+  plane_line_list.action = visualization_msgs::Marker::ADD;
+  plane_line_list.id = 2;
+  plane_line_list.type = visualization_msgs::Marker::LINE_LIST;
+  plane_line_list.ns = "plane_lines";
+  plane_line_list.scale.x = 0.15;
+  plane_line_list.scale.y = 0.15;
+  plane_line_list.scale.z = 0.15;
+  plane_line_list.color.r = 0;
+  plane_line_list.color.g = 0;
+  plane_line_list.color.b = 1;
+  plane_line_list.color.a = 1;
+  plane_line_list.pose.orientation.w = 1;
+  for (size_t pi = 0; pi < plane_pairs->size(); ++pi) {
+    geometry_msgs::Point ori_pt;
+    ori_pt.x = (*plane_pairs)[pi].ori_pt.x;
+    ori_pt.y = (*plane_pairs)[pi].ori_pt.y;
+    ori_pt.z = (*plane_pairs)[pi].ori_pt.z;
+
+    for (size_t ni = 0; ni < 3; ++ni) {
+      geometry_msgs::Point neigh_pt;
+      neigh_pt.x = (*plane_pairs)[pi].neigh_pt[ni].x;
+      neigh_pt.y = (*plane_pairs)[pi].neigh_pt[ni].y;
+      neigh_pt.z = (*plane_pairs)[pi].neigh_pt[ni].z;
+
+      plane_line_list.points.push_back(ori_pt);
+      plane_line_list.points.push_back(std::move(neigh_pt));
+    }
+  }
+  associate_marker_array.markers.push_back(plane_line_list);
+  associate_pub_.publish(associate_marker_array);
 #endif
 }
 

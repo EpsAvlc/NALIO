@@ -1,7 +1,7 @@
 <launch>
     <arg name="debug" default="false"/>
     <group if="$(arg debug)">
-        <node name="nalio_pipeline" pkg="nalio" type="nalio_pipeline" launch-prefix="gdb" output="screen"/> 
+        <node name="nalio_pipeline" pkg="nalio" type="nalio_pipeline" launch-prefix="cgdb" output="screen"/> 
     </group>
     <group unless="$(arg debug)">
         <node name="nalio_pipeline" pkg="nalio" type="nalio_pipeline" output="screen"/> 

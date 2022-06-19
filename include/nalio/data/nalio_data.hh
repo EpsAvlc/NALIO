@@ -7,6 +7,7 @@
 #include <pcl/pcl_macros.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/common/impl/accumulators.hpp>
 
 #include "datahub/data.hh"
 
@@ -22,6 +23,41 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(
     NalioPoint,
     (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(
         float, rel_time, rel_time)(uint16_t, line, line))
+
+namespace pcl {
+namespace detail {
+
+struct AccumulatorLine {
+  // Storage
+  int32_t line;
+
+  AccumulatorLine() : line(0) {}
+
+  template <typename PointT>
+  void add(const PointT& t) {
+    line += t.line;
+  }
+
+  // TODO(caoming): change it into median number.
+  template <typename PointT>
+  void get(PointT& t, size_t n) const {
+    t.line = line / n;
+  }
+};
+
+template <>
+struct Accumulators<NalioPoint> {
+  // Check if a given accumulator type is compatible with a given point type
+  template <typename AccumulatorT, typename PointT>
+  struct IsCompatible
+      : boost::mpl::apply<typename AccumulatorT::IsCompatible, PointT> {};
+  // A Fusion vector with accumulator types that are compatible with given
+  // point types
+  typedef typename boost::fusion::result_of::as_vector<
+      boost::mpl::vector<AccumulatorXYZ, AccumulatorLine>>::type type;
+};
+}  // namespace detail
+}  // namespace pcl
 
 namespace nalio {
 
