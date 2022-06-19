@@ -133,8 +133,8 @@ void LOAMSystem::update() {
     ROS_INFO_STREAM_FUNC("enter update.");
     auto& curr_feature_package = feature_package_list_.front();
     if (prev_feature_package) {
-      std::vector<EdgePair> edge_pairs;
-      std::vector<PlanePair> plane_pairs;
+      std::vector<LOAMEdgePair> edge_pairs;
+      std::vector<LOAMPlanePair> plane_pairs;
       associate(prev_feature_package, curr_feature_package, &edge_pairs,
                 &plane_pairs);
     }
@@ -145,8 +145,8 @@ void LOAMSystem::update() {
 
 void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
                            const LOAMFeaturePackage::Ptr& curr_feature,
-                           std::vector<EdgePair>* edge_pairs,
-                           std::vector<PlanePair>* plane_pairs) {
+                           std::vector<LOAMEdgePair>* edge_pairs,
+                           std::vector<LOAMPlanePair>* plane_pairs) {
   const double kMaxAssociateDistanceSq = 25;
   if (!edge_pairs || !plane_pairs) {
     throw(std::invalid_argument("edge_pairs or plane_pairs is nullptr!"));
@@ -210,7 +210,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
     }
 
     if (second_closest_pt_ind > 0) {
-      EdgePair edge_pair;
+      LOAMEdgePair edge_pair;
       edge_pair.ori_pt = pt_sel;
       edge_pair.neigh_pt[0] = closest_pt;
       edge_pair.neigh_pt[1] =
@@ -271,7 +271,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
     }
 
     if (l_ind >= 0 && m_ind >= 0) {
-      PlanePair plane_pair;
+      LOAMPlanePair plane_pair;
       plane_pair.ori_pt = pt_sel;
       plane_pair.neigh_pt[0] = closest_pt;
       plane_pair.neigh_pt[1] = (*prev_feature->less_flat_cloud)[l_ind];

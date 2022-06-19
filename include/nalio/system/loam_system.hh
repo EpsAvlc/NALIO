@@ -18,6 +18,7 @@
 #include "nalio/propagator/linear_propagator.hh"
 #include "nalio/system/system.hh"
 #include "nalio/factory/factory.hh"
+#include "nalio/ceres/loam_factors.hh"
 
 #ifdef USE_UNOS
 #include "unos/manifold/manifold.hh"
@@ -38,21 +39,13 @@ class LOAMSystem final : public System {
   void feedData(const datahub::MessagePackage& data);
 
  private:
-  struct EdgePair {
-    PointT ori_pt;
-    PointT neigh_pt[2];
-  };
 
-  struct PlanePair {
-    PointT ori_pt;
-    PointT neigh_pt[3];
-  };
   void propagate() override;
   void update() override;
   void associate(const LOAMFeaturePackage::Ptr& prev_feature,
                  const LOAMFeaturePackage::Ptr& curr_feature,
-                 std::vector<EdgePair>* edge_pairs,
-                 std::vector<PlanePair>* plane_pairs);
+                 std::vector<LOAMEdgePair>* edge_pairs,
+                 std::vector<LOAMPlanePair>* plane_pairs);
 
   Eigen::Isometry3d getEstimated() override;
 

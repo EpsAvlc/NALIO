@@ -26,31 +26,24 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(
 
 namespace pcl {
 namespace detail {
-
 struct AccumulatorLine {
-  // Storage
-  int32_t line;
-
-  AccumulatorLine() : line(0) {}
-
+  mutable std::vector<int32_t> lines;
+  AccumulatorLine()  { lines.reserve(100); }
   template <typename PointT>
   void add(const PointT& t) {
-    line += t.line;
+    lines.push_back(t.line);
   }
 
-  // TODO(caoming): change it into median number.
   template <typename PointT>
   void get(PointT& t, size_t n) const {
-    t.line = line / n;
+    std::sort(lines.begin(), lines.end());
+    // mediam number.
+    t.line = lines[lines.size() / 2];
   }
 };
 
 template <>
 struct Accumulators<NalioPoint> {
-  // Check if a given accumulator type is compatible with a given point type
-  template <typename AccumulatorT, typename PointT>
-  struct IsCompatible
-      : boost::mpl::apply<typename AccumulatorT::IsCompatible, PointT> {};
   // A Fusion vector with accumulator types that are compatible with given
   // point types
   typedef typename boost::fusion::result_of::as_vector<

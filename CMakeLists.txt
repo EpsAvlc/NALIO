@@ -3,7 +3,7 @@ project(nalio)
 
 # add_compile_options(-std=c++17)
 set(CMAKE_BUILD_TYPE "RelWithDebInfo")
-set(CMAKE_BUILD_TYPE "Debug")
+# set(CMAKE_BUILD_TYPE "Debug")
 # -g 包含调试信息 
 # -Wall 启动所有的 warning
 # -O3 三级优化 最高的优化选项
