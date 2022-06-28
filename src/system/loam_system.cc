@@ -8,6 +8,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <visualization_msgs/MarkerArray.h>
+
+#include "nalio/utils/rviz_utils.hh"
 #endif
 
 #include "nalio/data/nalio_data.hh"
@@ -43,8 +45,10 @@ void LOAMSystem::init() {
       nh_.advertise<sensor_msgs::PointCloud2>("NALIO/less_flat_feature", 1);
   associate_pub_ =
       nh_.advertise<visualization_msgs::MarkerArray>("NALIO/associate", 1);
-  path_pub_ = nh_.advertise<nav_msgs::Path>("NALIO/Odometry", 1);
+  sharp_curvature_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(
+      "NALIO/sharp_curvature", 1);
 #endif
+  path_pub_ = nh_.advertise<nav_msgs::Path>("NALIO/Odometry", 1);
 
 #ifdef USE_UNOS
   throw(std::logic_error("not implement yet."));
@@ -68,11 +72,11 @@ void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
   propagate();
   LOAMFeaturePackage::Ptr feature_package(new LOAMFeaturePackage);
   PointCloudData::Ptr pc_data;
-  std::string msg_frame_id;
+  std::string msg_frame_id = "velodyne";
   for (int mi = 0; mi < msgs.size(); ++mi) {
     if (msgs[mi][0]->type.val == datahub::Message::Type::kLidar) {
       pc_data = std::dynamic_pointer_cast<PointCloudData>(msgs[mi][0]->data);
-      msg_frame_id = msgs[mi][0]->header.frame_id;
+      // msg_frame_id = msgs[mi][0]->header.frame_id;
       break;
     }
   }
@@ -113,6 +117,20 @@ void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
   less_flat_feature_pub_.publish(less_flat_pc_msg);
   sharp_feature_pub_.publish(sharp_pc_msg);
   less_sharp_feature_pub_.publish(less_sharp_pc_msg);
+
+  // display sharp curvatures.
+  size_t sharp_size = feature_package->sharp_cloud->size();
+  std::vector<std::string> texts(sharp_size);
+  std::vector<Eigen::Vector3d> positions(sharp_size);
+  for (size_t si = 0; si < feature_package->sharp_curvatures.size(); ++si) {
+    texts[si] = std::to_string(feature_package->sharp_inds[si]) + ", " +
+                std::to_string(feature_package->sharp_curvatures[si]);
+    positions[si] =
+        feature_package->sharp_cloud->at(si).getVector3fMap().cast<double>();
+  }
+  visualization_msgs::MarkerArray sharp_curvature_msg =
+      rviz_utils::putTexts(texts, positions, "velodyne");
+  sharp_curvature_pub_.publish(sharp_curvature_msg);
 #endif
 }
 
@@ -158,9 +176,12 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   std::vector<int> pt_search_inds;
   std::vector<float> pt_search_dists;
   for (size_t ei = 0; ei < curr_feature->sharp_cloud->size(); ++ei) {
-    const PointT& pt_sel = curr_feature->sharp_cloud->at(ei);
+    const PointT& pt_curr = curr_feature->sharp_cloud->at(ei);
+    PointT pt_curr_in_last;
+    transformToLastFrame(pt_curr, curr2last_q_, curr2last_t_, &pt_curr_in_last);
 
-    edge_kdtree.nearestKSearch(pt_sel, 1, pt_search_inds, pt_search_dists);
+    edge_kdtree.nearestKSearch(pt_curr_in_last, 1, pt_search_inds,
+                               pt_search_dists);
     if (pt_search_dists[0] > kMaxAssociateDistanceSq) {
       continue;
     }
@@ -181,7 +202,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
 
       double distance =
           ((*prev_feature->less_sharp_cloud)[ej].getVector3fMap() -
-           pt_sel.getVector3fMap())
+           pt_curr_in_last.getVector3fMap())
               .squaredNorm();
       if (distance < second_closest_pt_dist) {
         second_closest_pt_ind = ej;
@@ -200,7 +221,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       }
       double distance =
           ((*prev_feature->less_sharp_cloud)[ej].getVector3fMap() -
-           pt_sel.getVector3fMap())
+           pt_curr_in_last.getVector3fMap())
               .squaredNorm();
       if (distance < second_closest_pt_dist) {
         second_closest_pt_ind = ej;
@@ -210,7 +231,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
 
     if (second_closest_pt_ind > 0) {
       LOAMEdgePair edge_pair;
-      edge_pair.ori_pt = pt_sel;
+      edge_pair.ori_pt = pt_curr;
       edge_pair.neigh_pt[0] = closest_pt;
       edge_pair.neigh_pt[1] =
           (*prev_feature->less_sharp_cloud)[second_closest_pt_ind];
@@ -282,23 +303,24 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
 
 #ifdef NALIO_DEBUG
   visualization_msgs::MarkerArray associate_marker_array;
-  visualization_msgs::Marker edge_line_list, plane_line_list;
-  edge_line_list.header.frame_id = "camera_init";
-  edge_line_list.header.stamp = ros::Time::now();
-  edge_line_list.action = visualization_msgs::Marker::ADD;
-  edge_line_list.id = 1;
-  edge_line_list.type = visualization_msgs::Marker::LINE_LIST;
-  edge_line_list.ns = "edge_lines";
-  edge_line_list.scale.x = 0.15;
-  edge_line_list.scale.y = 0.15;
-  edge_line_list.scale.z = 0.15;
-  edge_line_list.color.r = 1;
-  edge_line_list.color.g = 0;
-  edge_line_list.color.b = 0;
-  edge_line_list.color.a = 1;
-  edge_line_list.pose.orientation.w = 1;
 
   for (size_t ei = 0; ei < edge_pairs->size(); ++ei) {
+    visualization_msgs::Marker edge_line_list, plane_line_list;
+    edge_line_list.header.frame_id = "camera_init";
+    edge_line_list.header.stamp = ros::Time::now();
+    edge_line_list.action = visualization_msgs::Marker::ADD;
+    edge_line_list.id = ei;
+    edge_line_list.type = visualization_msgs::Marker::LINE_LIST;
+    edge_line_list.ns = "edge_lines";
+    edge_line_list.scale.x = 0.15;
+    edge_line_list.scale.y = 0.15;
+    edge_line_list.scale.z = 0.15;
+    edge_line_list.color.r = rand() % 255 / 255.;
+    edge_line_list.color.g = rand() % 255 / 255.;
+    edge_line_list.color.b = rand() % 255 / 255.;
+    edge_line_list.color.a = 1;
+    edge_line_list.pose.orientation.w = 1;
+
     geometry_msgs::Point ori_pt;
     ori_pt.x = (*edge_pairs)[ei].ori_pt.x;
     ori_pt.y = (*edge_pairs)[ei].ori_pt.y;
@@ -313,40 +335,40 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       edge_line_list.points.push_back(ori_pt);
       edge_line_list.points.push_back(std::move(neigh_pt));
     }
+    associate_marker_array.markers.push_back(edge_line_list);
   }
-  associate_marker_array.markers.push_back(edge_line_list);
 
-  plane_line_list.header.frame_id = "camera_init";
-  plane_line_list.header.stamp = ros::Time::now();
-  plane_line_list.action = visualization_msgs::Marker::ADD;
-  plane_line_list.id = 2;
-  plane_line_list.type = visualization_msgs::Marker::LINE_LIST;
-  plane_line_list.ns = "plane_lines";
-  plane_line_list.scale.x = 0.15;
-  plane_line_list.scale.y = 0.15;
-  plane_line_list.scale.z = 0.15;
-  plane_line_list.color.r = 0;
-  plane_line_list.color.g = 0;
-  plane_line_list.color.b = 1;
-  plane_line_list.color.a = 1;
-  plane_line_list.pose.orientation.w = 1;
-  for (size_t pi = 0; pi < plane_pairs->size(); ++pi) {
-    geometry_msgs::Point ori_pt;
-    ori_pt.x = (*plane_pairs)[pi].ori_pt.x;
-    ori_pt.y = (*plane_pairs)[pi].ori_pt.y;
-    ori_pt.z = (*plane_pairs)[pi].ori_pt.z;
+  // plane_line_list.header.frame_id = "camera_init";
+  // plane_line_list.header.stamp = ros::Time::now();
+  // plane_line_list.action = visualization_msgs::Marker::ADD;
+  // plane_line_list.id = 2;
+  // plane_line_list.type = visualization_msgs::Marker::LINE_LIST;
+  // plane_line_list.ns = "plane_lines";
+  // plane_line_list.scale.x = 0.15;
+  // plane_line_list.scale.y = 0.15;
+  // plane_line_list.scale.z = 0.15;
+  // plane_line_list.color.r = 0;
+  // plane_line_list.color.g = 0;
+  // plane_line_list.color.b = 1;
+  // plane_line_list.color.a = 1;
+  // plane_line_list.pose.orientation.w = 1;
+  // for (size_t pi = 0; pi < plane_pairs->size(); ++pi) {
+  //   geometry_msgs::Point ori_pt;
+  //   ori_pt.x = (*plane_pairs)[pi].ori_pt.x;
+  //   ori_pt.y = (*plane_pairs)[pi].ori_pt.y;
+  //   ori_pt.z = (*plane_pairs)[pi].ori_pt.z;
 
-    for (size_t ni = 0; ni < 3; ++ni) {
-      geometry_msgs::Point neigh_pt;
-      neigh_pt.x = (*plane_pairs)[pi].neigh_pt[ni].x;
-      neigh_pt.y = (*plane_pairs)[pi].neigh_pt[ni].y;
-      neigh_pt.z = (*plane_pairs)[pi].neigh_pt[ni].z;
+  //   for (size_t ni = 0; ni < 3; ++ni) {
+  //     geometry_msgs::Point neigh_pt;
+  //     neigh_pt.x = (*plane_pairs)[pi].neigh_pt[ni].x;
+  //     neigh_pt.y = (*plane_pairs)[pi].neigh_pt[ni].y;
+  //     neigh_pt.z = (*plane_pairs)[pi].neigh_pt[ni].z;
 
-      plane_line_list.points.push_back(ori_pt);
-      plane_line_list.points.push_back(std::move(neigh_pt));
-    }
-  }
-  associate_marker_array.markers.push_back(plane_line_list);
+  //     plane_line_list.points.push_back(ori_pt);
+  //     plane_line_list.points.push_back(std::move(neigh_pt));
+  //   }
+  // }
+  // associate_marker_array.markers.push_back(plane_line_list);
   associate_pub_.publish(associate_marker_array);
 #endif
 }
@@ -383,9 +405,11 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
 
   state_.translation() = state_.translation() + state_.rotation() * curr2last_t;
   state_.linear() = state_.rotation() * curr2last_q;
+
+  curr2last_q_ = curr2last_q;
+  curr2last_t_ = curr2last_t;
 #endif
 
-#ifdef NALIO_DEBUG
   Eigen::Isometry3d curr_pose_in_map;
 #ifdef USE_UNOS
   throw(std::logic_error("Has not been implemented."));
@@ -407,8 +431,22 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
   pose.pose.orientation.z = curr_q.z();
   path_msg_.poses.push_back(pose);
   path_pub_.publish(path_msg_);
-#endif
   return true;
+}
+
+void LOAMSystem::transformPointToLastFrame(const NalioPoint& curr_p,
+                                      const Eigen::Quaterniond& curr2last_q,
+                                      const Eigen::Vector3d& curr2last_t,
+                                      NalioPoint* last_p) {
+  Eigen::Vector3d curr_pt_eigen(curr_p.x, curr_p.y, curr_p.z);
+  Eigen::Vector3d last_pt_eigen =
+      curr2last_q.toRotationMatrix() * curr_pt_eigen + curr2last_t;
+  last_p->x = last_pt_eigen.x();
+  last_p->y = last_pt_eigen.y();
+  last_p->z = last_pt_eigen.z();
+  last_p->intensity = curr_p.intensity;
+  last_p->rel_time = curr_p.rel_time;
+  last_p->line = curr_p.line;
 }
 
 Eigen::Isometry3d LOAMSystem::getEstimated() {

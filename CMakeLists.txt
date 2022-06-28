@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(nalio)
 
-# add_compile_options(-std=c++17)
+add_compile_options(-std=c++17)
 set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 # set(CMAKE_BUILD_TYPE "Debug")
 # -g 包含调试信息 

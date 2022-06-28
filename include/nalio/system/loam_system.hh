@@ -1,9 +1,9 @@
 #ifndef NALIO_SYSTEM_LOAM_SYSTEM_HH__
 #define NALIO_SYSTEM_LOAM_SYSTEM_HH__
 
-#ifdef NALIO_DEBUG
-#include <ros/ros.h>
 #include <nav_msgs/Path.h>
+#include <ros/ros.h>
+#ifdef NALIO_DEBUG
 #endif
 
 #include <condition_variable>
@@ -15,11 +15,11 @@
 
 #define PCL_NO_PRECOMPILE
 #include "datahub/datahub.hh"
+#include "nalio/ceres/loam_factors.hh"
+#include "nalio/factory/factory.hh"
 #include "nalio/feature/loam_feature_extractor.hh"
 #include "nalio/propagator/linear_propagator.hh"
 #include "nalio/system/system.hh"
-#include "nalio/factory/factory.hh"
-#include "nalio/ceres/loam_factors.hh"
 
 #ifdef USE_UNOS
 #include "unos/manifold/manifold.hh"
@@ -40,14 +40,17 @@ class LOAMSystem final : public System {
   void feedData(const datahub::MessagePackage& data);
 
  private:
-
   void propagate() override;
   void update() override;
   void associate(const LOAMFeaturePackage::Ptr& prev_feature,
                  const LOAMFeaturePackage::Ptr& curr_feature,
                  std::vector<LOAMEdgePair>* edge_pairs,
                  std::vector<LOAMPlanePair>* plane_pairs);
-  bool optimize(const std::vector<LOAMEdgePair>& edge_pair, const std::vector<LOAMPlanePair>& plane_pair);
+  bool optimize(const std::vector<LOAMEdgePair>& edge_pair,
+                const std::vector<LOAMPlanePair>& plane_pair);
+  void transformPointToLastFrame(const NalioPoint& curr_p,
+                            const Eigen::Quaterniond& curr2last_q,
+                            const Eigen::Vector3d& curr2last_t, NalioPoint* last_p);
 
   Eigen::Isometry3d getEstimated() override;
 
@@ -58,6 +61,8 @@ class LOAMSystem final : public System {
 #else
   // qx, qy, qz, qw, x, y, z
   Eigen::Isometry3d state_;
+  Eigen::Quaterniond curr2last_q_;
+  Eigen::Vector3d curr2last_t_;
 #endif
 
   bool initialized_, running_;
@@ -72,15 +77,16 @@ class LOAMSystem final : public System {
   const double kNearbyScan = 2.5;
 
 #ifdef NALIO_DEBUG
-  ros::NodeHandle nh_;
   ros::Publisher sharp_feature_pub_;
   ros::Publisher less_sharp_feature_pub_;
   ros::Publisher flat_feature_pub_;
   ros::Publisher less_flat_feature_pub_;
   ros::Publisher associate_pub_;
+  ros::Publisher sharp_curvature_pub_;
+#endif
+  ros::NodeHandle nh_;
   ros::Publisher path_pub_;
   nav_msgs::Path path_msg_;
-#endif
 };
 
 REGISTER_NALIO(System, LOAMSystem, "LOAMSystem")

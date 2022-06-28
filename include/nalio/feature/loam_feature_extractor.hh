@@ -11,6 +11,14 @@
 #include <pcl/point_types.h>
 #include <ros/console.h>
 
+#ifdef NALIO_DEBUG
+#include <pcl_conversions/pcl_conversions.h>
+#include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <visualization_msgs/MarkerArray.h>
+#include "nalio/utils/rviz_utils.hh"
+#endif
+
 #include "nalio/data/nalio_data.hh"
 #include "nalio/feature/feature_extractor.hh"
 #include "nalio/utils/log_utils.hh"
@@ -31,12 +39,20 @@ struct LOAMFeaturePackage : public FeaturePackage {
     less_sharp_cloud->clear();
     flat_cloud->clear();
     less_flat_cloud->clear();
+#ifdef NALIO_DEBUG
+    sharp_curvatures.clear();
+#endif
   }
 
   pcl::PointCloud<NalioPoint>::Ptr sharp_cloud;
   pcl::PointCloud<NalioPoint>::Ptr less_sharp_cloud;
   pcl::PointCloud<NalioPoint>::Ptr flat_cloud;
   pcl::PointCloud<NalioPoint>::Ptr less_flat_cloud;
+#ifdef NALIO_DEBUG
+  std::vector<double> sharp_curvatures;
+  std::vector<uint16_t> sharp_inds;
+  std::vector<std::vector<NalioPoint>> sharp_neigh_pts;
+#endif
 };
 
 // Currently it can only be applied to HDL-64.
@@ -45,14 +61,28 @@ class LOAMFeatureExtractor
     : public FeatureExtractor<NalioPoint, LOAMFeaturePackage> {
  public:
   using PointCloudT = pcl::PointCloud<NalioPoint>;
+
+  LOAMFeatureExtractor() {
+#ifdef NALIO_DEBUG
+    raw_scan_split_pub_ =
+        nh_.advertise<sensor_msgs::PointCloud2>("/Nalio/raw_scan_split", 1);
+    pts_ind_pub_ =
+        nh_.advertise<visualization_msgs::MarkerArray>("/Nalio/pts_ind", 1);
+#endif
+  }
+
   bool extract(const PointCloudT::ConstPtr&,
                LOAMFeaturePackage::Ptr features) override;
 
  private:
   struct PointInfo {
+    PointInfo() : neighbor_selected(false) {}
     float curvature;
     bool neighbor_selected;
     uint16_t ind;
+#ifdef NALIO_DEBUG
+    std::vector<NalioPoint> neigh_pts;
+#endif
   };
 
   int splitScans(const PointCloudT& cloud_in,
@@ -65,6 +95,12 @@ class LOAMFeatureExtractor
 
   std::array<std::array<PointInfo, 6250>, N> point_infos_;
   std::array<PointCloudT, N> scan_pts_;
+
+#ifdef NALIO_DEBUG
+  ros::NodeHandle nh_;
+  ros::Publisher raw_scan_split_pub_;
+  ros::Publisher pts_ind_pub_;
+#endif
 };
 
 template <uint16_t N>
@@ -85,6 +121,11 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     return -1;
   }
 
+#ifdef NALIO_DEBUG
+  std::vector<std::string> pt_inds;
+  std::vector<Eigen::Vector3d> pt_positions;
+#endif
+
   for (int line = 0; line <= 50; ++line) {
     const PointCloudT& line_pts = scan_pts_[line];
     for (size_t i = 5; i <= line_pts.size() - 6; ++i) {
@@ -104,12 +145,29 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
                      line_pts[i + 2].z + line_pts[i + 3].z + line_pts[i + 4].z +
                      line_pts[i + 5].z;
 
+#ifdef NALIO_DEBUG
+      for (int ni = -5; ni <= 5; ++ni) {
+        point_infos_[line][i].neigh_pts.push_back(line_pts[i + ni]);
+      }
+
+      if (line == 40) {
+        pt_inds.push_back(std::to_string(i));
+        pt_positions.push_back(line_pts[i].getVector3fMap().cast<double>());
+      }
+#endif
+
       point_infos_[line][i].curvature =
           diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
-      point_infos_[line][i].neighbor_selected = false;
       point_infos_[line][i].ind = i;
     }
   }
+
+#ifdef NALIO_DEBUG
+  ROS_INFO_STREAM_FUNC("inds size: " << pt_inds.size());
+  visualization_msgs::MarkerArray inds_msg =
+      rviz_utils::putTexts(pt_inds, pt_positions, "velodyne", 0.04);
+  pts_ind_pub_.publish(inds_msg);
+#endif
 
   for (int line = 0; line < N; ++line) {
     uint16_t num_line_pts = scan_pts_[line].size();
@@ -121,8 +179,8 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     pcl::PointCloud<NalioPoint>::Ptr less_flat_cloud_tmp(
         new pcl::PointCloud<NalioPoint>);
     for (int sec = 0; sec < kSections; ++sec) {
-      uint16_t sp = 5 + (num_line_pts - 10) / 6 * sec;
-      uint16_t ep = 5 + (num_line_pts - 10) / 6 * (sec + 1) - 1;
+      uint16_t sp = 5 + (num_line_pts - 10) / 6. * sec;
+      uint16_t ep = 5 + (num_line_pts - 10) / 6. * (sec + 1) - 1;
 
       std::sort(point_infos_[line].begin() + sp,
                 point_infos_[line].begin() + ep + 1,
@@ -137,6 +195,21 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
         }
         if (sharp_feature_num < kMaxSharpPts) {
           features->sharp_cloud->push_back(scan_pts_[line][pt_ind]);
+#ifdef NALIO_DEBUG
+          features->sharp_curvatures.push_back(
+              point_infos_[line][pi].curvature);
+          features->sharp_inds.push_back(pt_ind);
+          // ROS_INFO_STREAM("Sharp point: "
+          //                 << pt_ind << ", neigh size: "
+          //                 << point_infos_[line][pi].neigh_pts.size());
+          // for (size_t ni = 0; ni < point_infos_[line][pi].neigh_pts.size();
+          //      ++ni) {
+          //   ROS_INFO_STREAM(point_infos_[line][pi]
+          //                       .neigh_pts[ni]
+          //                       .getVector3fMap()
+          //                       .transpose());
+          // }
+#endif
         }
         features->less_sharp_cloud->push_back(scan_pts_[line][pt_ind]);
 
@@ -211,9 +284,9 @@ int LOAMFeatureExtractor<N>::splitScans(const PointCloudT& cloud_in,
   int num_points = cloud_in.size();
   // atan2 (-pi, pi]
   // 表示当前点与x轴正方向的夹角，并且从x轴逆时针的角度为正，顺时针的角度为负
-  float start_ori = -atan2(cloud_in[0].y, cloud_in[1].x);
+  float start_ori = -atan2(cloud_in[0].y, cloud_in[0].x);
   float end_ori =
-      -atan2(cloud_in[num_points - 1].y, cloud_in[num_points - 1].x);
+      -atan2(cloud_in[num_points - 1].y, cloud_in[num_points - 1].x) + 2 * M_PI;
   if (end_ori - start_ori > 3 * M_PI) {
     end_ori -= 2 * M_PI;
   } else if (end_ori - start_ori < M_PI) {
@@ -237,7 +310,7 @@ int LOAMFeatureExtractor<N>::splitScans(const PointCloudT& cloud_in,
     if (angle >= -8.83)
       line = int((2 - angle) * 3.0 + 0.5);
     else
-      line = 64 / 2 + int((-8.83 - angle) * 2.0 + 0.5);
+      line = N / 2 + int((-8.83 - angle) * 2.0 + 0.5);
 
     // use [0 50]  > 50 remove outlies
     if (angle > 2 || angle < -24.33 || line > 50 || line < 0) {
@@ -273,6 +346,25 @@ int LOAMFeatureExtractor<N>::splitScans(const PointCloudT& cloud_in,
     pt.line = line;
     scan_pts->at(line).push_back(pt);
   }
+#ifdef NALIO_DEBUG
+  pcl::PointCloud<pcl::PointXYZI> raw_scan_split;
+  pcl::PointXYZI tmp_pt;
+  for (int si = 0; si < scan_pts->size(); ++si) {
+    for (int pi = 0; pi < scan_pts->at(si).size(); ++pi) {
+      tmp_pt.x = scan_pts->at(si)[pi].x;
+      tmp_pt.y = scan_pts->at(si)[pi].y;
+      tmp_pt.z = scan_pts->at(si)[pi].z;
+      tmp_pt.intensity = si * 4;
+      raw_scan_split.push_back(tmp_pt);
+    }
+  }
+  sensor_msgs::PointCloud2 raw_scan_split_msg;
+  pcl::toROSMsg(raw_scan_split, raw_scan_split_msg);
+  raw_scan_split_msg.header.frame_id = "velodyne";
+  raw_scan_split_msg.header.stamp = ros::Time::now();
+  raw_scan_split_pub_.publish(raw_scan_split_msg);
+#endif
+
   return 0;
 }
 

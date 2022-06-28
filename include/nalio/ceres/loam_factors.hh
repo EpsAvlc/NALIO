@@ -35,7 +35,7 @@ struct LOAMEdgeFactor {
     Eigen::Matrix<T, 3, 1> neigh_pt_b{T(neigh_pt_b_.x()), T(neigh_pt_b_.y()),
                                       T(neigh_pt_b_.z())};
     Eigen::Matrix<T, 3, 1> curr2last_t{T(t[0]), T(t[1]), T(t[2])};
-    Eigen::Quaternion<T> curr2last_q{T(q[0]), T(q[1]), T(q[2]), T(q[3])};
+    Eigen::Quaternion<T> curr2last_q{T(q[3]), T(q[0]), T(q[1]), T(q[2])};
     Eigen::Matrix<T, 3, 1> ori_pt_in_last = curr2last_q * ori_pt + curr2last_t;
 
     Eigen::Matrix<T, 3, 1> nu =
