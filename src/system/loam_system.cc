@@ -178,7 +178,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   for (size_t ei = 0; ei < curr_feature->sharp_cloud->size(); ++ei) {
     const PointT& pt_curr = curr_feature->sharp_cloud->at(ei);
     PointT pt_curr_in_last;
-    transformToLastFrame(pt_curr, curr2last_q_, curr2last_t_, &pt_curr_in_last);
+    transformPointToLastFrame(pt_curr, curr2last_q_, curr2last_t_, &pt_curr_in_last);
 
     edge_kdtree.nearestKSearch(pt_curr_in_last, 1, pt_search_inds,
                                pt_search_dists);
