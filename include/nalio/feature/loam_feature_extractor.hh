@@ -116,16 +116,15 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
 
   features->clear();
 
+  pcl::console::TicToc tt;
+  tt.tic();
   if (!(0 == splitScans(*cloud_in, &scan_pts_))) {
     ROS_ERROR_STREAM_FUNC("Failed to splitScans");
     return -1;
   }
+  ROS_INFO_STREAM_FUNC("splitScans elapse " << tt.toc() << "ms.");
 
-#ifdef NALIO_DEBUG
-  std::vector<std::string> pt_inds;
-  std::vector<Eigen::Vector3d> pt_positions;
-#endif
-
+  tt.tic();
   for (int line = 0; line <= 50; ++line) {
     const PointCloudT& line_pts = scan_pts_[line];
     for (size_t i = 5; i <= line_pts.size() - 6; ++i) {
@@ -145,31 +144,15 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
                      line_pts[i + 2].z + line_pts[i + 3].z + line_pts[i + 4].z +
                      line_pts[i + 5].z;
 
-#ifdef NALIO_DEBUG
-      for (int ni = -5; ni <= 5; ++ni) {
-        point_infos_[line][i].neigh_pts.push_back(line_pts[i + ni]);
-      }
-
-      if (line == 40) {
-        pt_inds.push_back(std::to_string(i));
-        pt_positions.push_back(line_pts[i].getVector3fMap().cast<double>());
-      }
-#endif
-
       point_infos_[line][i].curvature =
           diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
       point_infos_[line][i].ind = i;
     }
   }
+  ROS_INFO_STREAM_FUNC("edge feature extract elapse " << tt.toc() << "ms.");
 
-#ifdef NALIO_DEBUG
-  ROS_INFO_STREAM_FUNC("inds size: " << pt_inds.size());
-  visualization_msgs::MarkerArray inds_msg =
-      rviz_utils::putTexts(pt_inds, pt_positions, "velodyne", 0.04);
-  pts_ind_pub_.publish(inds_msg);
-#endif
-
-  for (int line = 0; line < N; ++line) {
+  tt.tic();
+  for (int line = 0; line < 50; ++line) {
     uint16_t num_line_pts = scan_pts_[line].size();
     if (num_line_pts < 6) {
       continue;
@@ -195,21 +178,6 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
         }
         if (sharp_feature_num < kMaxSharpPts) {
           features->sharp_cloud->push_back(scan_pts_[line][pt_ind]);
-#ifdef NALIO_DEBUG
-          features->sharp_curvatures.push_back(
-              point_infos_[line][pi].curvature);
-          features->sharp_inds.push_back(pt_ind);
-          // ROS_INFO_STREAM("Sharp point: "
-          //                 << pt_ind << ", neigh size: "
-          //                 << point_infos_[line][pi].neigh_pts.size());
-          // for (size_t ni = 0; ni < point_infos_[line][pi].neigh_pts.size();
-          //      ++ni) {
-          //   ROS_INFO_STREAM(point_infos_[line][pi]
-          //                       .neigh_pts[ni]
-          //                       .getVector3fMap()
-          //                       .transpose());
-          // }
-#endif
         }
         features->less_sharp_cloud->push_back(scan_pts_[line][pt_ind]);
 
@@ -261,7 +229,6 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
       }
     }
 
-    // printf("downsample point size %ld \n", less_flat_cloud_tmp->size());
     pcl::PointCloud<NalioPoint> less_flat_cloud_ds;
     pcl::VoxelGrid<NalioPoint> ds_filter;
     ds_filter.setInputCloud(less_flat_cloud_tmp);
@@ -269,6 +236,7 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     ds_filter.filter(less_flat_cloud_ds);
     *features->less_flat_cloud += less_flat_cloud_ds;
   }
+  ROS_INFO_STREAM_FUNC("plane feature extract elapse " << tt.toc() << "ms.");
 
   // for (int i = 0; i < features->less_flat_cloud->size(); ++i) {
   //   ROS_INFO_STREAM_FUNC(

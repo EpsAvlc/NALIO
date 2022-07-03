@@ -178,7 +178,8 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   for (size_t ei = 0; ei < curr_feature->sharp_cloud->size(); ++ei) {
     const PointT& pt_curr = curr_feature->sharp_cloud->at(ei);
     PointT pt_curr_in_last;
-    transformPointToLastFrame(pt_curr, curr2last_q_, curr2last_t_, &pt_curr_in_last);
+    transformPointToLastFrame(pt_curr, curr2last_q_, curr2last_t_,
+                              &pt_curr_in_last);
 
     edge_kdtree.nearestKSearch(pt_curr_in_last, 1, pt_search_inds,
                                pt_search_dists);
@@ -245,7 +246,11 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       "Current flat cloud size: " << curr_feature->flat_cloud->size());
   for (size_t pi = 0; pi < curr_feature->flat_cloud->size(); ++pi) {
     const PointT& pt_sel = curr_feature->flat_cloud->at(pi);
-    plane_kdtree.nearestKSearch(pt_sel, 1, pt_search_inds, pt_search_dists);
+    PointT pt_curr_in_last;
+    transformPointToLastFrame(pt_sel, curr2last_q_, curr2last_t_,
+                              &pt_curr_in_last);
+    plane_kdtree.nearestKSearch(pt_curr_in_last, 1, pt_search_inds,
+                                pt_search_dists);
     if (pt_search_dists[0] > kMaxAssociateDistanceSq) {
       continue;
     }
@@ -393,6 +398,12 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
                              curr2last_data_t);
   }
 
+  for (size_t pi = 0; pi < plane_pair.size(); ++pi) {
+    ceres::CostFunction* plane_factor = LOAMPlaneFactor::Create(plane_pair[pi]);
+    problem.AddResidualBlock(plane_factor, loss_function, curr2last_data_q,
+                             curr2last_data_t);
+  }
+
   ceres::Solver::Options options;
   options.linear_solver_type = ceres::DENSE_QR;
   options.max_num_iterations = 4;
@@ -434,10 +445,9 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
   return true;
 }
 
-void LOAMSystem::transformPointToLastFrame(const NalioPoint& curr_p,
-                                      const Eigen::Quaterniond& curr2last_q,
-                                      const Eigen::Vector3d& curr2last_t,
-                                      NalioPoint* last_p) {
+void LOAMSystem::transformPointToLastFrame(
+    const NalioPoint& curr_p, const Eigen::Quaterniond& curr2last_q,
+    const Eigen::Vector3d& curr2last_t, NalioPoint* last_p) {
   Eigen::Vector3d curr_pt_eigen(curr_p.x, curr_p.y, curr_p.z);
   Eigen::Vector3d last_pt_eigen =
       curr2last_q.toRotationMatrix() * curr_pt_eigen + curr2last_t;
