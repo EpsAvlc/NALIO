@@ -37,7 +37,9 @@ class LOAMSystem final : public System {
 
   void init() override;
   void stop() override;
-  void feedData(const datahub::MessagePackage& data);
+  void feedData(const datahub::MessagePackage& data) override;
+  // only for debug
+  void feedData(const LOAMFeaturePackage::Ptr& feature_package);
 
  private:
   void propagate() override;
@@ -74,7 +76,6 @@ class LOAMSystem final : public System {
   Eigen::Isometry3d last_state_transform_;
   Eigen::Isometry3d curr_state_transform_;
 
-  const double kNearbyScan = 2.5;
 
 #ifdef NALIO_DEBUG
   ros::Publisher sharp_feature_pub_;

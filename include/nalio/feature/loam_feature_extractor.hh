@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include <pcl/console/time.h>
+#include <pcl/filters/filter.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types.h>
 #include <ros/console.h>
@@ -22,6 +23,7 @@
 #include "nalio/data/nalio_data.hh"
 #include "nalio/feature/feature_extractor.hh"
 #include "nalio/utils/log_utils.hh"
+#include "nalio/utils/pcl_utils.hh"
 
 namespace nalio {
 
@@ -113,21 +115,28 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
   if (!features) {
     throw(std::invalid_argument("features is empty."));
   }
-
   features->clear();
 
   pcl::console::TicToc tt;
   tt.tic();
-  if (!(0 == splitScans(*cloud_in, &scan_pts_))) {
+  pcl::PointCloud<NalioPoint> cloud_out;
+  std::vector<int> indices;
+  pcl::removeNaNFromPointCloud(*cloud_in, cloud_out, indices);
+  pcl_utils::removeClosedPointCloud(cloud_out, cloud_out, 5);
+
+  if (!(0 == splitScans(cloud_out, &scan_pts_))) {
     ROS_ERROR_STREAM_FUNC("Failed to splitScans");
     return -1;
   }
   ROS_INFO_STREAM_FUNC("splitScans elapse " << tt.toc() << "ms.");
 
   tt.tic();
-  for (int line = 0; line <= 50; ++line) {
+  for (int line = 0; line <= N; ++line) {
     const PointCloudT& line_pts = scan_pts_[line];
-    for (size_t i = 5; i <= line_pts.size() - 6; ++i) {
+    if (line_pts.size() < 11) {
+      continue;
+    }
+    for (size_t i = 5; i < line_pts.size() - 5; ++i) {
       float diff_x = line_pts[i - 5].x + line_pts[i - 4].x + line_pts[i - 3].x +
                      line_pts[i - 2].x + line_pts[i - 1].x -
                      10 * line_pts[i].x + line_pts[i + 1].x +
@@ -152,9 +161,9 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
   ROS_INFO_STREAM_FUNC("edge feature extract elapse " << tt.toc() << "ms.");
 
   tt.tic();
-  for (int line = 0; line < 50; ++line) {
+  for (int line = 0; line < N; ++line) {
     uint16_t num_line_pts = scan_pts_[line].size();
-    if (num_line_pts < 6) {
+    if (num_line_pts < 11) {
       continue;
     }
     std::unordered_set<uint16_t> neighbor_selected, edge_inds;
@@ -173,7 +182,8 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
       int sharp_feature_num = 0;
       for (int pi = ep; pi >= sp; --pi) {
         uint16_t& pt_ind = point_infos_[line][pi].ind;
-        if (neighbor_selected.count(pt_ind) > 0) {
+        if (neighbor_selected.count(pt_ind) > 0 ||
+            point_infos_[line][pi].curvature < 0.1) {
           continue;
         }
         if (sharp_feature_num < kMaxSharpPts) {
@@ -184,10 +194,25 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
         if (sharp_feature_num >= kMaxLessSharpPts) {
           break;
         }
-        for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
-          float diff_x = scan_pts_[line][j].x - scan_pts_[line][pt_ind].x;
-          float diff_y = scan_pts_[line][j].y - scan_pts_[line][pt_ind].y;
-          float diff_z = scan_pts_[line][j].z - scan_pts_[line][pt_ind].z;
+        for (int j = 1; j < 5; ++j) {
+          float diff_x =
+              scan_pts_[line][pt_ind + j].x - scan_pts_[line][pt_ind + j - 1].x;
+          float diff_y =
+              scan_pts_[line][pt_ind + j].y - scan_pts_[line][pt_ind + j - 1].y;
+          float diff_z =
+              scan_pts_[line][pt_ind + j].z - scan_pts_[line][pt_ind + j - 1].z;
+          if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z > 0.05) {
+            break;
+          }
+          neighbor_selected.insert(j);
+        }
+        for (int j = -1; j >= -5; --j) {
+          float diff_x =
+              scan_pts_[line][pt_ind + j].x - scan_pts_[line][pt_ind + j + 1].x;
+          float diff_y =
+              scan_pts_[line][pt_ind + j].y - scan_pts_[line][pt_ind + j + 1].y;
+          float diff_z =
+              scan_pts_[line][pt_ind + j].z - scan_pts_[line][pt_ind + j + 1].z;
           if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z > 0.05) {
             break;
           }
@@ -200,7 +225,8 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
       int flat_feature_num = 0;
       for (int pi = sp; pi <= ep; ++pi) {
         uint16_t& pt_ind = point_infos_[line][pi].ind;
-        if (neighbor_selected.count(pt_ind) > 0) {
+        if (neighbor_selected.count(pt_ind) > 0 &&
+            point_infos_[line][pi].curvature > 0.1) {
           continue;
         }
         if (flat_feature_num < kMaxFlatPts) {
@@ -208,12 +234,27 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
         } else {
           break;
         }
-        for (int j = pt_ind - 5; j < pt_ind + 6; ++j) {
-          float diff_x = scan_pts_[line][j].x - scan_pts_[line][pt_ind].x;
-          float diff_y = scan_pts_[line][j].y - scan_pts_[line][pt_ind].y;
-          float diff_z = scan_pts_[line][j].z - scan_pts_[line][pt_ind].z;
-          if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z >= 0.05) {
-            continue;
+        for (int j = 1; j < 5; ++j) {
+          float diff_x =
+              scan_pts_[line][pt_ind + j].x - scan_pts_[line][pt_ind + j - 1].x;
+          float diff_y =
+              scan_pts_[line][pt_ind + j].y - scan_pts_[line][pt_ind + j - 1].y;
+          float diff_z =
+              scan_pts_[line][pt_ind + j].z - scan_pts_[line][pt_ind + j - 1].z;
+          if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z > 0.05) {
+            break;
+          }
+          neighbor_selected.insert(j);
+        }
+        for (int j = -1; j >= -5; --j) {
+          float diff_x =
+              scan_pts_[line][pt_ind + j].x - scan_pts_[line][pt_ind + j + 1].x;
+          float diff_y =
+              scan_pts_[line][pt_ind + j].y - scan_pts_[line][pt_ind + j + 1].y;
+          float diff_z =
+              scan_pts_[line][pt_ind + j].z - scan_pts_[line][pt_ind + j + 1].z;
+          if (diff_x * diff_x + diff_y * diff_y + diff_z * diff_z > 0.05) {
+            break;
           }
           neighbor_selected.insert(j);
         }
@@ -248,7 +289,6 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
 template <uint16_t N>
 int LOAMFeatureExtractor<N>::splitScans(const PointCloudT& cloud_in,
                                         std::array<PointCloudT, N>* scan_pts) {
-  NalioPoint pt;
   int num_points = cloud_in.size();
   // atan2 (-pi, pi]
   // 表示当前点与x轴正方向的夹角，并且从x轴逆时针的角度为正，顺时针的角度为负
@@ -265,6 +305,7 @@ int LOAMFeatureExtractor<N>::splitScans(const PointCloudT& cloud_in,
   for (uint i = 0; i < N; ++i) {
     scan_pts->at(i).clear();
   }
+  NalioPoint pt;
   for (size_t i = 0; i < cloud_in.size(); ++i) {
     pt.x = cloud_in[i].x;
     pt.y = cloud_in[i].y;
@@ -280,8 +321,7 @@ int LOAMFeatureExtractor<N>::splitScans(const PointCloudT& cloud_in,
     else
       line = N / 2 + int((-8.83 - angle) * 2.0 + 0.5);
 
-    // use [0 50]  > 50 remove outlies
-    if (angle > 2 || angle < -24.33 || line > 50 || line < 0) {
+    if (angle > 2 || angle < -24.33 || line < 0 || line > 50) {
       continue;
     }
 

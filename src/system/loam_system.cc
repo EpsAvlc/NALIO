@@ -134,6 +134,13 @@ void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
 #endif
 }
 
+void LOAMSystem::feedData(const LOAMFeaturePackage::Ptr& feature_package) {
+  feature_package_list_mutex_.lock();
+  feature_package_list_.push(feature_package);
+  feature_package_list_mutex_.unlock();
+  feature_package_list_cv_.notify_all();
+}
+
 void LOAMSystem::propagate() {
   // Eigen::Isometry3d propagated_pose = propagator_.propagate();
   // state_.set(eigenToState(propagated_pose));
@@ -164,7 +171,16 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
                            const LOAMFeaturePackage::Ptr& curr_feature,
                            std::vector<LOAMEdgePair>* edge_pairs,
                            std::vector<LOAMPlanePair>* plane_pairs) {
-  const double kMaxAssociateDistanceSq = 9;
+  const double kMaxAssociateDistanceSq = 25;
+  const double kNearbyScan = 2.5;
+  if (!prev_feature->flat_cloud || !prev_feature->less_flat_cloud ||
+      !prev_feature->sharp_cloud || !prev_feature->less_sharp_cloud) {
+    throw(std::invalid_argument("prev_feature has null ptr!"));
+  }
+  if (!curr_feature->flat_cloud || !curr_feature->less_flat_cloud ||
+      !curr_feature->sharp_cloud || !curr_feature->less_sharp_cloud) {
+    throw(std::invalid_argument("curr_feature has null ptr!"));
+  }
   if (!edge_pairs || !plane_pairs) {
     throw(std::invalid_argument("edge_pairs or plane_pairs is nullptr!"));
   }
@@ -175,6 +191,8 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   edge_kdtree.setInputCloud(prev_feature->less_sharp_cloud);
   std::vector<int> pt_search_inds;
   std::vector<float> pt_search_dists;
+  ROS_INFO_STREAM_FUNC(
+      "Sharp cloud size: " << curr_feature->sharp_cloud->size());
   for (size_t ei = 0; ei < curr_feature->sharp_cloud->size(); ++ei) {
     const PointT& pt_curr = curr_feature->sharp_cloud->at(ei);
     PointT pt_curr_in_last;
@@ -230,7 +248,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
       }
     }
 
-    if (second_closest_pt_ind > 0) {
+    if (second_closest_pt_ind >= 0) {
       LOAMEdgePair edge_pair;
       edge_pair.ori_pt = pt_curr;
       edge_pair.neigh_pt[0] = closest_pt;
@@ -383,33 +401,37 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
 #ifdef USE_UNOS
   throw(std::logic_error("Has not been implemented."));
 #else
-  double curr2last_data_t[3]{0, 0, 0};
-  double curr2last_data_q[4]{0, 0, 0, 1};
-  ceres::Problem::Options problem_options;
-  ceres::Problem problem(problem_options);
-  ceres::EigenQuaternionManifold* q_manifold =
-      new ceres::EigenQuaternionManifold;
-  problem.AddParameterBlock(curr2last_data_q, 4, q_manifold);
-  problem.AddParameterBlock(curr2last_data_t, 3);
-  ceres::LossFunction* loss_function = new ceres::HuberLoss(0.1);
-  for (size_t ei = 0; ei < edge_pair.size(); ++ei) {
-    ceres::CostFunction* edge_factor = LOAMEdgeFactor::Create(edge_pair[ei]);
-    problem.AddResidualBlock(edge_factor, loss_function, curr2last_data_q,
-                             curr2last_data_t);
-  }
+  ROS_INFO_STREAM_FUNC("Edge pair size: " << edge_pair.size());
+  static double curr2last_data_t[3]{0, 0, 0};
+  static double curr2last_data_q[4]{0, 0, 0, 1};
+  for (size_t opti_counter = 0; opti_counter < 2; ++opti_counter) {
+    ceres::Problem::Options problem_options;
+    ceres::Problem problem(problem_options);
+    ceres::EigenQuaternionManifold* q_manifold =
+        new ceres::EigenQuaternionManifold;
+    problem.AddParameterBlock(curr2last_data_q, 4, q_manifold);
+    problem.AddParameterBlock(curr2last_data_t, 3);
+    ceres::LossFunction* loss_function = new ceres::HuberLoss(0.1);
+    for (size_t ei = 0; ei < edge_pair.size(); ++ei) {
+      ceres::CostFunction* edge_factor = LOAMEdgeFactor::Create(edge_pair[ei]);
+      problem.AddResidualBlock(edge_factor, loss_function, curr2last_data_q,
+                               curr2last_data_t);
+    }
 
-  for (size_t pi = 0; pi < plane_pair.size(); ++pi) {
-    ceres::CostFunction* plane_factor = LOAMPlaneFactor::Create(plane_pair[pi]);
-    problem.AddResidualBlock(plane_factor, loss_function, curr2last_data_q,
-                             curr2last_data_t);
-  }
+    for (size_t pi = 0; pi < plane_pair.size(); ++pi) {
+      ceres::CostFunction* plane_factor =
+          LOAMPlaneFactor::Create(plane_pair[pi]);
+      problem.AddResidualBlock(plane_factor, loss_function, curr2last_data_q,
+                               curr2last_data_t);
+    }
 
-  ceres::Solver::Options options;
-  options.linear_solver_type = ceres::DENSE_QR;
-  options.max_num_iterations = 4;
-  options.minimizer_progress_to_stdout = false;
-  ceres::Solver::Summary summary;
-  ceres::Solve(options, &problem, &summary);
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_QR;
+    options.max_num_iterations = 4;
+    options.minimizer_progress_to_stdout = false;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+  }
 
   Eigen::Map<Eigen::Vector3d> curr2last_t(curr2last_data_t);
   Eigen::Map<Eigen::Quaterniond> curr2last_q(curr2last_data_q);
