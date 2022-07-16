@@ -3,5 +3,6 @@
 ## Progress
 
 ### LOAM
-- [ ] feature_extraction
-- [ ] optimization
+- [x] feature_extraction
+- [x] Odometry
+- [ ] mapping

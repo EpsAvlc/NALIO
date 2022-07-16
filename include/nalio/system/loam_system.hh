@@ -59,7 +59,7 @@ class LOAMSystem final : public System {
   LinearPropagator propagator_;
   LOAMFeatureExtractor<64> feature_extractor_;
 #ifdef USE_UNOS
-  unos::Manifold state_;
+  unos::Manifold::Ptr state_;
 #else
   // qx, qy, qz, qw, x, y, z
   Eigen::Isometry3d state_;
