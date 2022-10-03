@@ -56,15 +56,26 @@ class LOAMSystem final : public System {
 
   Eigen::Isometry3d getEstimated() override;
 
+  void processOdometry(const LOAMFeaturePackage::Ptr& feature);
+
+  void processMapping(const LOAMFeaturePackage::Ptr& feature);
+
   LinearPropagator propagator_;
   LOAMFeatureExtractor<64> feature_extractor_;
 #ifdef USE_UNOS
   unos::Manifold::Ptr state_;
 #else
-  // qx, qy, qz, qw, x, y, z
-  Eigen::Isometry3d state_;
-  Eigen::Quaterniond curr2last_q_;
-  Eigen::Vector3d curr2last_t_;
+  /* for odometry */
+  Eigen::Quaterniond q_odom_;
+  Eigen::Vector3d t_odom_;
+  Eigen::Quaterniond q_curr2last_;
+  Eigen::Vector3d t_curr2last_;
+
+  /* for mapping */
+  Eigen::Quaterniond q_map_;
+  Eigen::Vector3d t_map_;
+  Eigen::Quaterniond q_odom2map_;
+  Eigen::Vector3d t_odom2map_;
 #endif
 
   bool initialized_, running_;

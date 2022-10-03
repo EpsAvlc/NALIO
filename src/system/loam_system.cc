@@ -53,7 +53,8 @@ void LOAMSystem::init() {
 #ifdef USE_UNOS
   throw(std::logic_error("not implement yet."));
 #else
-  state_.setIdentity();
+  t_odom_.setZero();
+  q_odom_.setIdentity();
 #endif
 
   update_thread_ = std::thread(&LOAMSystem::update, this);
@@ -147,25 +148,35 @@ void LOAMSystem::propagate() {
 }
 
 void LOAMSystem::update() {
-  static LOAMFeaturePackage::Ptr prev_feature_package;
+  int cnt = 0;
   while (running_) {
     std::unique_lock<std::mutex> lock(feature_package_list_mutex_);
     while (feature_package_list_.empty() && running_) {
       feature_package_list_cv_.wait(lock);
     }
-    ROS_INFO_STREAM_FUNC("enter update.");
-    auto& curr_feature_package = feature_package_list_.front();
-    if (prev_feature_package) {
-      std::vector<LOAMEdgePair> edge_pairs;
-      std::vector<LOAMPlanePair> plane_pairs;
-      associate(prev_feature_package, curr_feature_package, &edge_pairs,
-                &plane_pairs);
-      optimize(edge_pairs, plane_pairs);
+    auto& feature_package = feature_package_list_.front();
+    processOdometry(feature_package);
+    ++cnt;
+    if (5 == cnt) {
+      processMapping(feature_package);
+      cnt = 0;
     }
-    prev_feature_package = curr_feature_package;
     feature_package_list_.pop();
   }
 }
+
+void LOAMSystem::processOdometry(const LOAMFeaturePackage::Ptr& feature) {
+  static LOAMFeaturePackage::Ptr prev_feature_package;
+  if (prev_feature_package) {
+    std::vector<LOAMEdgePair> edge_pairs;
+    std::vector<LOAMPlanePair> plane_pairs;
+    associate(prev_feature_package, feature, &edge_pairs, &plane_pairs);
+    optimize(edge_pairs, plane_pairs);
+  }
+  prev_feature_package = feature;
+}
+
+void LOAMSystem::processMapping(const LOAMFeaturePackage::Ptr& feature) {}
 
 void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
                            const LOAMFeaturePackage::Ptr& curr_feature,
@@ -196,7 +207,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   for (size_t ei = 0; ei < curr_feature->sharp_cloud->size(); ++ei) {
     const PointT& pt_curr = curr_feature->sharp_cloud->at(ei);
     PointT pt_curr_in_last;
-    transformPointToLastFrame(pt_curr, curr2last_q_, curr2last_t_,
+    transformPointToLastFrame(pt_curr, q_curr2last_, t_curr2last_,
                               &pt_curr_in_last);
 
     edge_kdtree.nearestKSearch(pt_curr_in_last, 1, pt_search_inds,
@@ -265,7 +276,7 @@ void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
   for (size_t pi = 0; pi < curr_feature->flat_cloud->size(); ++pi) {
     const PointT& pt_sel = curr_feature->flat_cloud->at(pi);
     PointT pt_curr_in_last;
-    transformPointToLastFrame(pt_sel, curr2last_q_, curr2last_t_,
+    transformPointToLastFrame(pt_sel, q_curr2last_, t_curr2last_,
                               &pt_curr_in_last);
     plane_kdtree.nearestKSearch(pt_curr_in_last, 1, pt_search_inds,
                                 pt_search_dists);
@@ -436,28 +447,29 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
   Eigen::Map<Eigen::Vector3d> curr2last_t(curr2last_data_t);
   Eigen::Map<Eigen::Quaterniond> curr2last_q(curr2last_data_q);
 
-  state_.translation() = state_.translation() + state_.rotation() * curr2last_t;
-  state_.linear() = state_.rotation() * curr2last_q;
+  t_odom_ = t_odom_ + q_odom_ * curr2last_t;
+  q_odom_ = q_odom_ * curr2last_q;
 
-  curr2last_q_ = curr2last_q;
-  curr2last_t_ = curr2last_t;
+  q_curr2last_ = curr2last_q;
+  t_curr2last_ = curr2last_t;
 #endif
 
-  Eigen::Isometry3d curr_pose_in_map;
+  Eigen::Isometry3d curr_pose_in_odometry;
 #ifdef USE_UNOS
   throw(std::logic_error("Has not been implemented."));
 #else
-  curr_pose_in_map = state_;
+  curr_pose_in_odometry.translation() = t_odom_;
+  curr_pose_in_odometry.linear() = q_odom_.toRotationMatrix();
 #endif
   // ROS_INFO_STREAM_FUNC("Current state: " << std::endl
   //                                        << curr_pose_in_map.matrix());
   path_msg_.header.frame_id = "map";
   path_msg_.header.stamp = ros::Time::now();
   geometry_msgs::PoseStamped pose;
-  pose.pose.position.x = curr_pose_in_map.translation().x();
-  pose.pose.position.y = curr_pose_in_map.translation().y();
-  pose.pose.position.z = curr_pose_in_map.translation().z();
-  Eigen::Quaterniond curr_q(curr_pose_in_map.linear());
+  pose.pose.position.x = curr_pose_in_odometry.translation().x();
+  pose.pose.position.y = curr_pose_in_odometry.translation().y();
+  pose.pose.position.z = curr_pose_in_odometry.translation().z();
+  Eigen::Quaterniond curr_q(curr_pose_in_odometry.linear());
   pose.pose.orientation.w = curr_q.w();
   pose.pose.orientation.x = curr_q.x();
   pose.pose.orientation.y = curr_q.y();
