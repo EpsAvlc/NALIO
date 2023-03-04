@@ -7,7 +7,7 @@ set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 # -g 包含调试信息 
 # -Wall 启动所有的 warning
 # -O3 三级优化 最高的优化选项
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -Werror")
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs

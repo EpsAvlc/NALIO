@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "datahub/message.hh"
+#include "nalio/utils/transformation.hh"
 
 namespace nalio {
 class System {
@@ -18,7 +19,7 @@ class System {
  protected:
   virtual void propagate(){};
   virtual void update(){};
-  virtual Eigen::Isometry3d getEstimated(){ return Eigen::Isometry3d(); };
+  virtual TransformationD getEstimated(){ return TransformationD(); };
 };
 }  // namespace nalio
 

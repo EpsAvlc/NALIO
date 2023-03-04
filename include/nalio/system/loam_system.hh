@@ -18,8 +18,9 @@
 #include "nalio/ceres/loam_factors.hh"
 #include "nalio/factory/factory.hh"
 #include "nalio/feature/loam_feature_extractor.hh"
-#include "nalio/propagator/linear_propagator.hh"
+// #include "nalio/propagator/linear_propagator.hh"
 #include "nalio/system/system.hh"
+#include "nalio/utils/transformation.hh"
 
 #ifdef USE_UNOS
 #include "unos/manifold/manifold.hh"
@@ -44,25 +45,32 @@ class LOAMSystem final : public System {
  private:
   void propagate() override;
   void update() override;
+
+  /* loam private method. */
   void associate(const LOAMFeaturePackage::Ptr& prev_feature,
                  const LOAMFeaturePackage::Ptr& curr_feature,
                  std::vector<LOAMEdgePair>* edge_pairs,
                  std::vector<LOAMPlanePair>* plane_pairs);
+
   bool optimize(const std::vector<LOAMEdgePair>& edge_pair,
                 const std::vector<LOAMPlanePair>& plane_pair);
+
   void transformPointToLastFrame(const NalioPoint& curr_p,
                             const Eigen::Quaterniond& curr2last_q,
                             const Eigen::Vector3d& curr2last_t, NalioPoint* last_p);
+  TransformationD getEstimated() override;
 
-  Eigen::Isometry3d getEstimated() override;
+  void odometryThread();
 
-  LinearPropagator propagator_;
+  void mappingThread();
+
+  // LinearPropagator propagator_;
   LOAMFeatureExtractor<64> feature_extractor_;
 #ifdef USE_UNOS
   unos::Manifold::Ptr state_;
 #else
   // qx, qy, qz, qw, x, y, z
-  Eigen::Isometry3d state_;
+  TransformationD odom_trans_, mapper_trans_;
   Eigen::Quaterniond curr2last_q_;
   Eigen::Vector3d curr2last_t_;
 #endif
@@ -72,9 +80,7 @@ class LOAMSystem final : public System {
   std::condition_variable feature_package_list_cv_;
   std::mutex feature_package_list_mutex_;
   std::shared_mutex state_mutex_;
-  std::thread update_thread_;
-  Eigen::Isometry3d last_state_transform_;
-  Eigen::Isometry3d curr_state_transform_;
+  std::thread odometry_thread_, mapping_thread_;
 
 
 #ifdef NALIO_DEBUG
@@ -86,8 +92,8 @@ class LOAMSystem final : public System {
   ros::Publisher sharp_curvature_pub_;
 #endif
   ros::NodeHandle nh_;
-  ros::Publisher path_pub_;
-  nav_msgs::Path path_msg_;
+  ros::Publisher odom_path_pub_;
+  nav_msgs::Path odom_path_msg_;
 };
 
 REGISTER_NALIO(System, LOAMSystem, "LOAMSystem")

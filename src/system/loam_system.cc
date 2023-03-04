@@ -22,41 +22,46 @@ LOAMSystem::LOAMSystem()
       state_(unos::SO3(), unos::Vec3()),
 #endif
       initialized_(false),
-      running_(true) {
+      running_(true), nh_("NALIO_LOAM") {
 }
 
 LOAMSystem::~LOAMSystem() {
   running_ = false;
-  if (update_thread_.joinable()) {
-    feature_package_list_cv_.notify_all();
-    update_thread_.join();
+  if (odometry_thread_.joinable()) {
+    // feature_package_list_cv_.notify_all();
+    odometry_thread_.join();
+  }
+
+  if (mapping_thread_.joinable()) {
+    mapping_thread_.join();
   }
 }
 
 void LOAMSystem::init() {
 #ifdef NALIO_DEBUG
   sharp_feature_pub_ =
-      nh_.advertise<sensor_msgs::PointCloud2>("NALIO/sharp_feature", 1);
+      nh_.advertise<sensor_msgs::PointCloud2>("sharp_feature", 1);
   less_sharp_feature_pub_ =
-      nh_.advertise<sensor_msgs::PointCloud2>("NALIO/less_sharp_feature", 1);
+      nh_.advertise<sensor_msgs::PointCloud2>("less_sharp_feature", 1);
   flat_feature_pub_ =
-      nh_.advertise<sensor_msgs::PointCloud2>("NALIO/flat_feature", 1);
+      nh_.advertise<sensor_msgs::PointCloud2>("flat_feature", 1);
   less_flat_feature_pub_ =
-      nh_.advertise<sensor_msgs::PointCloud2>("NALIO/less_flat_feature", 1);
+      nh_.advertise<sensor_msgs::PointCloud2>("less_flat_feature", 1);
   associate_pub_ =
-      nh_.advertise<visualization_msgs::MarkerArray>("NALIO/associate", 1);
+      nh_.advertise<visualization_msgs::MarkerArray>("associate", 1);
   sharp_curvature_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(
       "NALIO/sharp_curvature", 1);
 #endif
-  path_pub_ = nh_.advertise<nav_msgs::Path>("NALIO/Odometry", 1);
+  odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
 
 #ifdef USE_UNOS
   throw(std::logic_error("not implement yet."));
 #else
-  state_.setIdentity();
+  odom_trans_.reset();
 #endif
 
-  update_thread_ = std::thread(&LOAMSystem::update, this);
+  odometry_thread_ = std::thread(&LOAMSystem::odometryThread, this);
+  mapping_thread_ = std::thread(&LOAMSystem::mappingThread, this);
   initialized_ = true;
 }
 
@@ -70,6 +75,7 @@ void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
   ROS_INFO_STREAM_FUNC(
       "Feed a message pack. Frame id: " << msgs[0][0]->header.frame_id);
   propagate();
+
   LOAMFeaturePackage::Ptr feature_package(new LOAMFeaturePackage);
   PointCloudData::Ptr pc_data;
   std::string msg_frame_id = "velodyne";
@@ -146,26 +152,7 @@ void LOAMSystem::propagate() {
   // state_.set(eigenToState(propagated_pose));
 }
 
-void LOAMSystem::update() {
-  static LOAMFeaturePackage::Ptr prev_feature_package;
-  while (running_) {
-    std::unique_lock<std::mutex> lock(feature_package_list_mutex_);
-    while (feature_package_list_.empty() && running_) {
-      feature_package_list_cv_.wait(lock);
-    }
-    ROS_INFO_STREAM_FUNC("enter update.");
-    auto& curr_feature_package = feature_package_list_.front();
-    if (prev_feature_package) {
-      std::vector<LOAMEdgePair> edge_pairs;
-      std::vector<LOAMPlanePair> plane_pairs;
-      associate(prev_feature_package, curr_feature_package, &edge_pairs,
-                &plane_pairs);
-      optimize(edge_pairs, plane_pairs);
-    }
-    prev_feature_package = curr_feature_package;
-    feature_package_list_.pop();
-  }
-}
+void LOAMSystem::update() {}
 
 void LOAMSystem::associate(const LOAMFeaturePackage::Ptr& prev_feature,
                            const LOAMFeaturePackage::Ptr& curr_feature,
@@ -436,34 +423,27 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair,
   Eigen::Map<Eigen::Vector3d> curr2last_t(curr2last_data_t);
   Eigen::Map<Eigen::Quaterniond> curr2last_q(curr2last_data_q);
 
-  state_.translation() = state_.translation() + state_.rotation() * curr2last_t;
-  state_.linear() = state_.rotation() * curr2last_q;
+  odom_trans_.translation = odom_trans_.translation + odom_trans_.rotation * curr2last_t;
+  odom_trans_.rotation = odom_trans_.rotation * curr2last_q;
 
   curr2last_q_ = curr2last_q;
   curr2last_t_ = curr2last_t;
 #endif
 
-  Eigen::Isometry3d curr_pose_in_map;
-#ifdef USE_UNOS
-  throw(std::logic_error("Has not been implemented."));
-#else
-  curr_pose_in_map = state_;
-#endif
-  // ROS_INFO_STREAM_FUNC("Current state: " << std::endl
-  //                                        << curr_pose_in_map.matrix());
-  path_msg_.header.frame_id = "map";
-  path_msg_.header.stamp = ros::Time::now();
+  odom_path_msg_.header.frame_id = "map";
+  odom_path_msg_.header.stamp = ros::Time::now();
   geometry_msgs::PoseStamped pose;
-  pose.pose.position.x = curr_pose_in_map.translation().x();
-  pose.pose.position.y = curr_pose_in_map.translation().y();
-  pose.pose.position.z = curr_pose_in_map.translation().z();
-  Eigen::Quaterniond curr_q(curr_pose_in_map.linear());
+  pose.pose.position.x = odom_trans_.translation.x();
+  pose.pose.position.y = odom_trans_.translation.y();
+  pose.pose.position.z = odom_trans_.translation.z();
+
+  Eigen::Quaterniond curr_q{odom_trans_.rotation};
   pose.pose.orientation.w = curr_q.w();
   pose.pose.orientation.x = curr_q.x();
   pose.pose.orientation.y = curr_q.y();
   pose.pose.orientation.z = curr_q.z();
-  path_msg_.poses.push_back(pose);
-  path_pub_.publish(path_msg_);
+  odom_path_msg_.poses.push_back(pose);
+  odom_path_pub_.publish(odom_path_msg_);
   return true;
 }
 
@@ -481,9 +461,30 @@ void LOAMSystem::transformPointToLastFrame(
   last_p->line = curr_p.line;
 }
 
-Eigen::Isometry3d LOAMSystem::getEstimated() {
+TransformationD LOAMSystem::getEstimated() {
   Eigen::Isometry3d ret;
-  return curr_state_transform_;
+  return mapper_trans_;
+}
+
+void LOAMSystem::odometryThread() {
+  static LOAMFeaturePackage::Ptr prev_feature_package;
+  while (running_) {
+    std::unique_lock<std::mutex> lock(feature_package_list_mutex_);
+    while (feature_package_list_.empty() && running_) {
+      feature_package_list_cv_.wait(lock);
+    }
+    ROS_INFO_STREAM_FUNC("process one frame.");
+    auto& curr_feature_package = feature_package_list_.front();
+    if (prev_feature_package) {
+      std::vector<LOAMEdgePair> edge_pairs;
+      std::vector<LOAMPlanePair> plane_pairs;
+      associate(prev_feature_package, curr_feature_package, &edge_pairs,
+                &plane_pairs);
+      optimize(edge_pairs, plane_pairs);
+    }
+    prev_feature_package = curr_feature_package;
+    feature_package_list_.pop();
+  }
 }
 
 }  // namespace nalio
