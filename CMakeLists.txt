@@ -65,6 +65,13 @@ target_link_libraries(${PROJECT_NAME}_utils
   ${OpenCV_LIBS}
 )
 
+add_library(${PROJECT_NAME}_visualizer 
+  src/visualizer/loam_visualizer.cc
+)
+target_link_libraries(${PROJECT_NAME}_visualizer
+  ${catkin_LIBRARIES}
+)
+
 add_library(${PROJECT_NAME}_data
   src/data/kitti_dataset.cc
   src/data/data_converter.cc
@@ -102,6 +109,7 @@ target_link_libraries(${PROJECT_NAME}_system
 	${PCL_LIBRARIES}
 	${CERES_LIBRARIES}
   ${PROJECT_NAME}_propagator
+  ${PROJECT_NAME}_visualizer
 )
 
 ####################### Nodes ####################

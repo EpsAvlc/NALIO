@@ -19,7 +19,7 @@ TEST(NALIO, FACTORY) {
   };
 
   using namespace nalio;
-  REGISTER_NALIO(Base, Derived, "TEST_Derived")
+  REGISTER_NALIO(Base, Derived, "TEST_Derived");
   auto derived_ptr = nalio::Factory<Base>::produce_unique("TEST_Derived");
   EXPECT_NE(derived_ptr, nullptr);
   EXPECT_EQ(derived_ptr->calc(), 10);

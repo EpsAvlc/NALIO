@@ -1,7 +1,10 @@
 #include "nalio/system/loam_system.hh"
 
 #include <pcl/kdtree/kdtree_flann.h>
+#include <memory>
+#include "nalio/system/system.hh"
 #include "nalio/utils/log_utils.hh"
+#include "nalio/visualizer/visualizer.hh"
 
 #ifdef NALIO_DEBUG
 #include <pcl/console/time.h>
@@ -13,6 +16,7 @@
 #endif
 
 #include "nalio/data/nalio_data.hh"
+#include "nalio/visualizer/loam_visualizer.hh"
 
 namespace nalio {
 
@@ -22,51 +26,28 @@ LOAMSystem::LOAMSystem()
       state_(unos::SO3(), unos::Vec3()),
 #endif
       flg_initialized_(false),
-      flg_running_(true),
-      nh_("NALIO_LOAM"),
-      status_(0) {
+      flg_running_(true) {
 }
 
-LOAMSystem::~LOAMSystem() {
-  flg_running_ = false;
-  if (odometry_thread_.joinable()) {
-    // feature_package_list_cv_.notify_all();
-    odometry_thread_.join();
-  }
-
-  if (mapping_thread_.joinable()) {
-    mapping_thread_.join();
-  }
-}
+LOAMSystem::~LOAMSystem() { flg_running_ = false; }
 
 void LOAMSystem::init() {
-#ifdef NALIO_DEBUG
-  pub_sharp_feature_ = nh_.advertise<sensor_msgs::PointCloud2>("sharp_feature", 1);
-  pub_less_sharp_feature_ = nh_.advertise<sensor_msgs::PointCloud2>("less_sharp_feature", 1);
-  pub_flat_feature_ = nh_.advertise<sensor_msgs::PointCloud2>("flat_feature", 1);
-  pub_less_flat_feature_ = nh_.advertise<sensor_msgs::PointCloud2>("less_flat_feature", 1);
-  pub_associate_ = nh_.advertise<visualization_msgs::MarkerArray>("associate", 1);
-  pub_sharp_curvature_ = nh_.advertise<visualization_msgs::MarkerArray>("NALIO/sharp_curvature", 1);
-#endif
-  pub_odom_path_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
+  // pub_odom_path_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
 
 #ifdef USE_UNOS
   throw(std::logic_error("not implement yet."));
 #else
-  robot2odom_.reset();
-  robot2map_.reset();
+  body2odom_.reset();
+  body2map_.reset();
 #endif
 
   initSlidingGridMap();
-
-  odometry_thread_ = std::thread(&LOAMSystem::odometryThread, this);
-  mapping_thread_ = std::thread(&LOAMSystem::mappingThread, this);
   flg_initialized_ = true;
 }
 
 void LOAMSystem::stop() {}
 
-void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
+void LOAMSystem::feedData(const datahub::MessagePackage& msgs, VisInfo::Ptr const& p_deb_info) {
   if (!flg_initialized_) {
     NLOG_ERROR_STREAM(" System has not been initialized.");
     return;
@@ -95,51 +76,12 @@ void LOAMSystem::feedData(const datahub::MessagePackage& msgs) {
   NLOG_INFO_STREAM("sharp feature size: " << feature_package->sharp_cloud->size());
   NLOG_INFO_STREAM("flat feature size: " << feature_package->flat_cloud->size());
 
-  {
-    std::lock_guard<std::mutex> lock(mtx_deq_feature_package_);
-    deq_feature_package_.push_back(feature_package);
+  if (!use_async_) {
+    odometryUpdate(feature_package, p_deb_info);
+    // mappingUpdate(feature_package, p_deb_info);
+  } else {
+    /// TODO(mars)
   }
-  cv_deq_feature_package_.notify_all();
-
-#ifdef NALIO_DEBUG
-  NLOG_INFO_STREAM("Feed data.");
-
-  sensor_msgs::PointCloud2 flat_pc_msg, less_flat_pc_msg, sharp_pc_msg, less_sharp_pc_msg;
-  pcl::toROSMsg(*feature_package->flat_cloud, flat_pc_msg);
-  pcl::toROSMsg(*feature_package->less_flat_cloud, less_flat_pc_msg);
-  pcl::toROSMsg(*feature_package->sharp_cloud, sharp_pc_msg);
-  pcl::toROSMsg(*feature_package->less_sharp_cloud, less_sharp_pc_msg);
-
-  flat_pc_msg.header.frame_id = msg_frame_id;
-  less_flat_pc_msg.header.frame_id = msg_frame_id;
-  sharp_pc_msg.header.frame_id = msg_frame_id;
-  less_sharp_pc_msg.header.frame_id = msg_frame_id;
-
-  pub_flat_feature_.publish(flat_pc_msg);
-  pub_less_flat_feature_.publish(less_flat_pc_msg);
-  pub_sharp_feature_.publish(sharp_pc_msg);
-  pub_less_sharp_feature_.publish(less_sharp_pc_msg);
-
-  // display sharp curvatures.
-  size_t sharp_size = feature_package->sharp_cloud->size();
-  std::vector<std::string> texts(sharp_size);
-  std::vector<Eigen::Vector3d> positions(sharp_size);
-  for (size_t si = 0; si < feature_package->sharp_curvatures.size(); ++si) {
-    texts[si] =
-        std::to_string(feature_package->sharp_inds[si]) + ", " + std::to_string(feature_package->sharp_curvatures[si]);
-    positions[si] = feature_package->sharp_cloud->at(si).getVector3fMap().cast<double>();
-  }
-  visualization_msgs::MarkerArray sharp_curvature_msg = rviz_utils::putTexts(texts, positions, "velodyne");
-  pub_sharp_curvature_.publish(sharp_curvature_msg);
-#endif
-}
-
-void LOAMSystem::feedData(const LOAMFeaturePackage::Ptr& feature_package) {
-  {
-    std::lock_guard<std::mutex> lock(mtx_deq_feature_package_);
-    deq_feature_package_.push_back(feature_package);
-  }
-  cv_deq_feature_package_.notify_all();
 }
 
 void LOAMSystem::initSlidingGridMap() {
@@ -304,80 +246,10 @@ void LOAMSystem::associateFromLast(const LOAMFeaturePackage::Ptr& prev_feature,
       plane_pairs->push_back(std::move(plane_pair));
     }
   }
-
-#ifdef NALIO_DEBUG
-  visualization_msgs::MarkerArray associate_marker_array;
-
-  for (size_t ei = 0; ei < edge_pairs->size(); ++ei) {
-    visualization_msgs::Marker edge_line_list, plane_line_list;
-    edge_line_list.header.frame_id = "camera_init";
-    edge_line_list.header.stamp = ros::Time::now();
-    edge_line_list.action = visualization_msgs::Marker::ADD;
-    edge_line_list.id = ei;
-    edge_line_list.type = visualization_msgs::Marker::LINE_LIST;
-    edge_line_list.ns = "edge_lines";
-    edge_line_list.scale.x = 0.15;
-    edge_line_list.scale.y = 0.15;
-    edge_line_list.scale.z = 0.15;
-    edge_line_list.color.r = rand() % 255 / 255.;
-    edge_line_list.color.g = rand() % 255 / 255.;
-    edge_line_list.color.b = rand() % 255 / 255.;
-    edge_line_list.color.a = 1;
-    edge_line_list.pose.orientation.w = 1;
-
-    geometry_msgs::Point ori_pt;
-    ori_pt.x = (*edge_pairs)[ei].ori_pt.x;
-    ori_pt.y = (*edge_pairs)[ei].ori_pt.y;
-    ori_pt.z = (*edge_pairs)[ei].ori_pt.z;
-
-    for (size_t ni = 0; ni < 2; ++ni) {
-      geometry_msgs::Point neigh_pt;
-      neigh_pt.x = (*edge_pairs)[ei].neigh_pt[ni].x;
-      neigh_pt.y = (*edge_pairs)[ei].neigh_pt[ni].y;
-      neigh_pt.z = (*edge_pairs)[ei].neigh_pt[ni].z;
-
-      edge_line_list.points.push_back(ori_pt);
-      edge_line_list.points.push_back(std::move(neigh_pt));
-    }
-    associate_marker_array.markers.push_back(edge_line_list);
-  }
-
-  // plane_line_list.header.frame_id = "camera_init";
-  // plane_line_list.header.stamp = ros::Time::now();
-  // plane_line_list.action = visualization_msgs::Marker::ADD;
-  // plane_line_list.id = 2;
-  // plane_line_list.type = visualization_msgs::Marker::LINE_LIST;
-  // plane_line_list.ns = "plane_lines";
-  // plane_line_list.scale.x = 0.15;
-  // plane_line_list.scale.y = 0.15;
-  // plane_line_list.scale.z = 0.15;
-  // plane_line_list.color.r = 0;
-  // plane_line_list.color.g = 0;
-  // plane_line_list.color.b = 1;
-  // plane_line_list.color.a = 1;
-  // plane_line_list.pose.orientation.w = 1;
-  // for (size_t pi = 0; pi < plane_pairs->size(); ++pi) {
-  //   geometry_msgs::Point ori_pt;
-  //   ori_pt.x = (*plane_pairs)[pi].ori_pt.x;
-  //   ori_pt.y = (*plane_pairs)[pi].ori_pt.y;
-  //   ori_pt.z = (*plane_pairs)[pi].ori_pt.z;
-
-  //   for (size_t ni = 0; ni < 3; ++ni) {
-  //     geometry_msgs::Point neigh_pt;
-  //     neigh_pt.x = (*plane_pairs)[pi].neigh_pt[ni].x;
-  //     neigh_pt.y = (*plane_pairs)[pi].neigh_pt[ni].y;
-  //     neigh_pt.z = (*plane_pairs)[pi].neigh_pt[ni].z;
-
-  //     plane_line_list.points.push_back(ori_pt);
-  //     plane_line_list.points.push_back(std::move(neigh_pt));
-  //   }
-  // }
-  // associate_marker_array.markers.push_back(plane_line_list);
-  pub_associate_.publish(associate_marker_array);
-#endif
 }
 
-bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair, const std::vector<LOAMPlanePair>& plane_pair) {
+bool LOAMSystem::odometryOptimize(const std::vector<LOAMEdgePair>& edge_pair,
+                                  const std::vector<LOAMPlanePair>& plane_pair) {
 #ifdef USE_UNOS
   throw(std::logic_error("Has not been implemented."));
 #else
@@ -412,9 +284,11 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair, const std:
   Eigen::Map<Eigen::Vector3d> curr2last_t(curr2last_data_t);
   Eigen::Map<Eigen::Quaterniond> curr2last_q(curr2last_data_q);
 
-  robot2odom_.translation = robot2odom_.translation + robot2odom_.rotation * curr2last_t;
-  robot2odom_.rotation = robot2odom_.rotation * curr2last_q;
+  body2odom_.translation = body2odom_.translation + body2odom_.rotation * curr2last_t;
+  body2odom_.rotation = body2odom_.rotation * curr2last_q;
 
+  curr2last_q_ = curr2last_q;
+  curr2last_t_ = curr2last_t;
 #endif
 
   return true;
@@ -432,83 +306,53 @@ void LOAMSystem::transformPointToLastFrame(const NalioPoint& curr_p, const Eigen
   last_p->line = curr_p.line;
 }
 
-TransformationD LOAMSystem::getEstimated() { return robot2map_; }
+TransformationD LOAMSystem::getEstimated() { return body2map_; }
 
-void LOAMSystem::odometryThread() {
+void LOAMSystem::odometryUpdate(LOAMFeaturePackage::Ptr const& feature_package, VisInfo::Ptr const& p_vis_info) {
   static LOAMFeaturePackage::Ptr prev_feature_package;
-  while (flg_running_) {
-    std::unique_lock<std::mutex> lock(mtx_deq_feature_package_);
-    while (deq_feature_package_.empty() && flg_running_) {
-      cv_deq_feature_package_.wait(lock, [this]() { return this->status_[Status::MSG_PACKAGE_READY]; });
-    }
-    NLOG_INFO_STREAM("odom process one frame.");
-    auto& curr_feature_package = deq_feature_package_.front();
-    if (prev_feature_package) {
-      std::vector<LOAMEdgePair> edge_pairs;
-      std::vector<LOAMPlanePair> plane_pairs;
-      pcl::console::TicToc tt;
-      tt.tic();
-      associateFromLast(prev_feature_package, curr_feature_package, &edge_pairs, &plane_pairs);
-      optimize(edge_pairs, plane_pairs);
-      NLOG_INFO("odom elapse: %lf ms", tt.toc());
-      publishOdom();
-    }
-    prev_feature_package = curr_feature_package;
-    deq_feature_package_.pop_front();
-    status_[Status::ODOMETRY_PROCESSED] = true;
-    if (true == status_[Status::MAPPING_PROCESSED]) {
-      status_[Status::MSG_PACKAGE_READY] = false;
-    }
-  }
-}
-
-void LOAMSystem::mappingThread() {
-  int cnt = 0;
-  static TransformationD last_robot2odom;
-  while (flg_running_) {
+  NLOG_INFO_STREAM("odom process one frame.");
+  auto& curr_feature_package = feature_package;
+  if (prev_feature_package) {
+    std::vector<LOAMEdgePair> edge_pairs;
+    std::vector<LOAMPlanePair> plane_pairs;
     pcl::console::TicToc tt;
     tt.tic();
-    std::unique_lock<std::mutex> lock(mtx_deq_feature_package_);
-    while (deq_feature_package_.empty() && flg_running_) {
-      cv_deq_feature_package_.wait(lock, [this]() { return this->status_[Status::MSG_PACKAGE_READY]; });
-    }
-    NLOG_INFO("wait msg elapse for %lf ms.", tt.toc());
-    // TODO(Check it)
-    ++cnt;
-    if (cnt < 5) {
-      continue;
-    }
-    cnt = 0;
-
-    TransformationD robot2map_est = robot2map_ * last_robot2odom.inverse() * robot2odom_;
-    NLOG_INFO_STREAM("robot2odom: " << std::endl
-                                    << robot2odom_.matrix() << std::endl
-                                    << "robot2map: " << std::endl
-                                    << robot2map_est.matrix());
-    NLOG_INFO_STREAM("odom process one frame.");
-    last_robot2odom = robot2odom_;
-
-    status_[Status::MAPPING_PROCESSED] = true;
-    if (true == status_[Status::ODOMETRY_PROCESSED]) {
-      status_[Status::MSG_PACKAGE_READY] = false;
-    }
+    associateFromLast(prev_feature_package, curr_feature_package, &edge_pairs, &plane_pairs);
+    odometryOptimize(edge_pairs, plane_pairs);
+    NLOG_INFO("odom elapse: %lf ms", tt.toc());
   }
+
+  if (p_vis_info) {
+    VIS_DOWN_CAST<LOAMVisInfo*>(p_vis_info.get())->body2odom = body2odom_;
+  }
+
+  prev_feature_package = curr_feature_package;
 }
 
-void LOAMSystem::publishOdom() {
-  msg_odom_path_.header.frame_id = "map";
-  msg_odom_path_.header.stamp = ros::Time::now();
-  geometry_msgs::PoseStamped pose;
-  pose.pose.position.x = robot2odom_.translation.x();
-  pose.pose.position.y = robot2odom_.translation.y();
-  pose.pose.position.z = robot2odom_.translation.z();
+void LOAMSystem::mappingUpdate(LOAMFeaturePackage::Ptr const& feat_pkg, VisInfo::Ptr const& p_vis_info) {
+  static int cnt = 0;
+  static TransformationD last_body2odom;
+  pcl::console::TicToc tt;
+  tt.tic();
+  NLOG_INFO("wait msg elapse for %lf ms.", tt.toc());
+  ++cnt;
+  if (cnt < 5) {
+    return;
+  }
+  cnt = 0;
 
-  Eigen::Quaterniond curr_q{robot2odom_.rotation};
-  pose.pose.orientation.w = curr_q.w();
-  pose.pose.orientation.x = curr_q.x();
-  pose.pose.orientation.y = curr_q.y();
-  pose.pose.orientation.z = curr_q.z();
-  msg_odom_path_.poses.push_back(pose);
-  pub_odom_path_.publish(msg_odom_path_);
+  TransformationD body2map_est = body2map_ * last_body2odom.inverse() * body2odom_;
+  NLOG_INFO_STREAM("body2odom: " << std::endl
+                                 << body2odom_.matrix() << std::endl
+                                 << "body2map: " << std::endl
+                                 << body2map_est.matrix());
+  NLOG_INFO_STREAM("odom process one frame.");
+
+  body2map_ = body2map_est;
+  if (p_vis_info) {
+    VIS_DOWN_CAST<LOAMVisInfo*>(p_vis_info.get())->body2map = body2map_;
+  }
+  last_body2odom = body2odom_;
 }
+
 }  // namespace nalio

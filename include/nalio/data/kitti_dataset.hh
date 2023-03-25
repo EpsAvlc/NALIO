@@ -26,7 +26,7 @@ class KITTIDataset : public Dataset {
   std::list<sensor_msgs::PointCloud2ConstPtr> lidar_msg_list_;
 };
 
-REGISTER_NALIO(Dataset, KITTIDataset, "KITTIDataset")
+REGISTER_NALIO(Dataset, KITTIDataset, "KITTIDataset");
 }  // namespace nalio
 
 #endif  // NALIO_DATA_KITTI_DATASET_HH__

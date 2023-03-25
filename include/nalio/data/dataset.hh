@@ -8,17 +8,17 @@
 #include <vector>
 
 #include "datahub/datahub.hh"
+#include "nalio/global.hh"
 
 namespace nalio {
 
 class Dataset {
  public:
-  using Ptr = std::shared_ptr<Dataset>;
+  NALIO_MAKE_TYPE(Dataset);
+
   Dataset() {}
   virtual bool init(bool online) { return false; }
-  void registerCallback(const datahub::DatahubCallback& cb) {
-    syncer_->registerCallback(cb);
-  }
+  void registerCallback(const datahub::DatahubCallback& cb) { syncer_->registerCallback(cb); }
 
   virtual ~Dataset() {}
 

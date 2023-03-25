@@ -65,7 +65,7 @@ class Factory {
 #define REGISTER_NALIO_VAR(Base, Derived) reg_nalio_##Base##_##Derived##_
 #define REGISTER_NALIO(Base, Derived, key, ...)                                \
   static Factory<Base>::register_t<Derived> REGISTER_NALIO_VAR(Base, Derived)( \
-      key, ##__VA_ARGS__);
+      key, ##__VA_ARGS__)
 
 }  // namespace nalio
 
