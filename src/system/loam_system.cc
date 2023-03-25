@@ -415,8 +415,6 @@ bool LOAMSystem::optimize(const std::vector<LOAMEdgePair>& edge_pair, const std:
   robot2odom_.translation = robot2odom_.translation + robot2odom_.rotation * curr2last_t;
   robot2odom_.rotation = robot2odom_.rotation * curr2last_q;
 
-  curr2last_q_ = curr2last_q;
-  curr2last_t_ = curr2last_t;
 #endif
 
   return true;
