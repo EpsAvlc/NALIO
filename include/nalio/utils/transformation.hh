@@ -16,12 +16,9 @@ struct Transformation {
     static_cast<void>(translation.setZero());
   }
 
-  Transformation(Eigen::Quaternion<T> const& rotation_input,
-                  Eigen::Matrix<T, 3, 1> const& translation_input,
-                  double const& timestamp_input = 0)
-      : translation(translation_input),
-        rotation(rotation_input),
-        timestamp(timestamp_input) {}
+  Transformation(Eigen::Quaternion<T> const& rotation_input, Eigen::Matrix<T, 3, 1> const& translation_input,
+                 double const& timestamp_input = 0)
+      : translation(translation_input), rotation(rotation_input), timestamp(timestamp_input) {}
 
   template <typename U>
   Transformation(Transformation<U> const& other) {
@@ -85,25 +82,19 @@ struct Transformation {
   }
 
   Transformation inverse() const {
-    Eigen::Matrix<T, 4, 4> matrix_inv = (this->matrix()).inverse();
     Transformation<T> mtrans_inv;
 
-    Eigen::Matrix<T, 3, 3> rotation_matrix = matrix_inv.block(0, 0, 3, 3);
-    Eigen::Quaternion<T> rotation(rotation_matrix);
-    mtrans_inv.rotation = rotation;
-    mtrans_inv.translation = matrix_inv.block(0, 3, 3, 1);
+    mtrans_inv.rotation = this->rotation.conjugate();
+    mtrans_inv.translation = -(this->rotation.conjugate() * this->translation);
     return mtrans_inv;
   }
 
-  Transformation interpoly(std::double_t scale,
-                            Transformation<T> const& other) const {
+  Transformation interpoly(std::double_t scale, Transformation<T> const& other) const {
     Transformation<T> interpoly_trans;
     std::double_t minus_scale{1.0 - scale};
-    interpoly_trans.translation =
-        this->translation * minus_scale + scale * other.translation;
+    interpoly_trans.translation = this->translation * minus_scale + scale * other.translation;
     interpoly_trans.rotation = this->rotation.slerp(scale, other.rotation);
-    interpoly_trans.timestamp =
-        this->timestamp * minus_scale + scale * other.timestamp;
+    interpoly_trans.timestamp = this->timestamp * minus_scale + scale * other.timestamp;
     return interpoly_trans;
   }
 
@@ -120,15 +111,12 @@ struct Transformation {
 
   Eigen::Matrix<T, 3, 1> operator*(Eigen::Matrix<T, 3, 1> const& point) const {
     Eigen::Matrix<T, 3, 1> transformed_point{0, 0, 0};
-    transformed_point =
-        this->rotation.toRotationMatrix() * point + this->translation;
+    transformed_point = this->rotation.toRotationMatrix() * point + this->translation;
     return transformed_point;
   }
 
-  friend std::ostream& operator<<(std::ostream& os,
-                                  Transformation<T> const pose) {
-    os << "[(" << pose.translation.transpose() << "),("
-       << pose.rotation.coeffs().transpose() << ")]";
+  friend std::ostream& operator<<(std::ostream& os, Transformation<T> const pose) {
+    os << "[(" << pose.translation.transpose() << "),(" << pose.rotation.coeffs().transpose() << ")]";
     return os;
   }
 

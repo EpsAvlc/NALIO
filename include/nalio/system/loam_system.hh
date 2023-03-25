@@ -6,6 +6,7 @@
 #ifdef NALIO_DEBUG
 #endif
 
+#include <bitset>
 #include <condition_variable>
 #include <queue>
 #include <shared_mutex>
@@ -19,6 +20,7 @@
 #include "nalio/factory/factory.hh"
 #include "nalio/feature/loam_feature_extractor.hh"
 // #include "nalio/propagator/linear_propagator.hh"
+#include "nalio/common/sliding_grid/auto_sliding_grid_map.hh"
 #include "nalio/system/system.hh"
 #include "nalio/utils/transformation.hh"
 
@@ -32,6 +34,7 @@ class LOAMSystem final : public System {
   using Ptr = std::unique_ptr<LOAMSystem>;
   using PointCloudT = pcl::PointCloud<NalioPoint>;
   using PointT = NalioPoint;
+  using SlidingGridMapT = AutoSlidingGridMap<3, std::array<pcl::PointCloud<PointT>::Ptr, 2>>;
 
   LOAMSystem();
   ~LOAMSystem();
@@ -43,57 +46,64 @@ class LOAMSystem final : public System {
   void feedData(const LOAMFeaturePackage::Ptr& feature_package);
 
  private:
+  enum Status { MSG_PACKAGE_READY = 0, ODOMETRY_PROCESSED, MAPPING_PROCESSED, NUM_STATUS };
+
+  void initSlidingGridMap();
+
   void propagate() override;
+
   void update() override;
 
-  /* loam private method. */
-  void associate(const LOAMFeaturePackage::Ptr& prev_feature,
-                 const LOAMFeaturePackage::Ptr& curr_feature,
-                 std::vector<LOAMEdgePair>* edge_pairs,
-                 std::vector<LOAMPlanePair>* plane_pairs);
+  void associateFromLast(const LOAMFeaturePackage::Ptr& prev_feature, const LOAMFeaturePackage::Ptr& curr_feature,
+                         std::vector<LOAMEdgePair>* edge_pairs, std::vector<LOAMPlanePair>* plane_pairs);
 
-  bool optimize(const std::vector<LOAMEdgePair>& edge_pair,
-                const std::vector<LOAMPlanePair>& plane_pair);
+  void associateFromMap(const LOAMFeaturePackage::Ptr& curr_feature, std::vector<LOAMEdgePair>* edge_pairs,
+                        std::vector<LOAMPlanePair>* plane_pairs);
 
-  void transformPointToLastFrame(const NalioPoint& curr_p,
-                            const Eigen::Quaterniond& curr2last_q,
-                            const Eigen::Vector3d& curr2last_t, NalioPoint* last_p);
+  bool optimize(const std::vector<LOAMEdgePair>& edge_pair, const std::vector<LOAMPlanePair>& plane_pair);
+
+  void transformPointToLastFrame(const NalioPoint& curr_p, const Eigen::Quaterniond& curr2last_q,
+                                 const Eigen::Vector3d& curr2last_t, NalioPoint* last_p);
   TransformationD getEstimated() override;
 
   void odometryThread();
 
   void mappingThread();
 
+  void publishOdom();
   // LinearPropagator propagator_;
   LOAMFeatureExtractor<64> feature_extractor_;
 #ifdef USE_UNOS
   unos::Manifold::Ptr state_;
 #else
   // qx, qy, qz, qw, x, y, z
-  TransformationD odom_trans_, mapper_trans_;
+  TransformationD robot2odom_, robot2map_;
   Eigen::Quaterniond curr2last_q_;
   Eigen::Vector3d curr2last_t_;
 #endif
 
-  bool initialized_, running_;
-  std::queue<LOAMFeaturePackage::Ptr> feature_package_list_;
-  std::condition_variable feature_package_list_cv_;
-  std::mutex feature_package_list_mutex_;
-  std::shared_mutex state_mutex_;
+  bool flg_initialized_, flg_running_;
+  std::deque<LOAMFeaturePackage::Ptr> deq_feature_package_;
+  std::condition_variable cv_deq_feature_package_;
+  std::mutex mtx_deq_feature_package_;
+  std::shared_mutex srd_mtx_state_;
   std::thread odometry_thread_, mapping_thread_;
 
-
 #ifdef NALIO_DEBUG
-  ros::Publisher sharp_feature_pub_;
-  ros::Publisher less_sharp_feature_pub_;
-  ros::Publisher flat_feature_pub_;
-  ros::Publisher less_flat_feature_pub_;
-  ros::Publisher associate_pub_;
-  ros::Publisher sharp_curvature_pub_;
+  ros::Publisher pub_sharp_feature_;
+  ros::Publisher pub_less_sharp_feature_;
+  ros::Publisher pub_flat_feature_;
+  ros::Publisher pub_less_flat_feature_;
+  ros::Publisher pub_associate_;
+  ros::Publisher pub_sharp_curvature_;
 #endif
   ros::NodeHandle nh_;
-  ros::Publisher odom_path_pub_;
-  nav_msgs::Path odom_path_msg_;
+  ros::Publisher pub_odom_path_;
+  nav_msgs::Path msg_odom_path_;
+
+  typename SlidingGridMapT::Ptr ptr_sliding_grid_map_;
+
+  std::bitset<NUM_STATUS> status_;
 };
 
 REGISTER_NALIO(System, LOAMSystem, "LOAMSystem")

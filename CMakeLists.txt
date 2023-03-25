@@ -8,6 +8,7 @@ set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 # -Wall 启动所有的 warning
 # -O3 三级优化 最高的优化选项
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -Werror")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
@@ -61,6 +62,7 @@ add_library(${PROJECT_NAME}_utils
 )
 target_link_libraries(${PROJECT_NAME}_utils
   ${catkin_LIBRARIES}
+  ${OpenCV_LIBS}
 )
 
 add_library(${PROJECT_NAME}_data

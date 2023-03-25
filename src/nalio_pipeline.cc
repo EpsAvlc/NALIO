@@ -45,7 +45,6 @@ void lessSharpFeatureCb(
 }
 #else
 void dataCallback(const datahub::MessagePackage& package) {
-  ROS_INFO_STREAM_FUNC("enter pipeline data cb");
   system_ptr->feedData(package);
 }
 #endif
@@ -149,7 +148,7 @@ int main(int argc, char* argv[]) {
     feature_package->sharp_cloud = sharp_feat_nalio;
     feature_package->less_sharp_cloud = less_sharp_feat_nalio;
 
-    ROS_INFO_STREAM_FUNC("flat_size: "
+    NLOG_INFO_STREAM("flat_size: "
                          << flat_feat_nalio->size()
                          << ", less_flat_size: " << less_flat_feat_nalio->size()
                          << ", sharp size: " << sharp_feat_nalio->size()

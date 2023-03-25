@@ -10,7 +10,7 @@ bool KITTIDataset::init(bool online) {
   online_ = online;
   if (online_) {
     if (!ros::isInitialized()) {
-      ROS_ERROR_STREAM_FUNC("ROS has not been inited. Init failed.");
+      NLOG_ERROR_STREAM("ROS has not been inited. Init failed.");
       return false;
     }
     lidar_sub_ = nh_.subscribe("/velodyne_points", 1,

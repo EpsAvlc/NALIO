@@ -125,10 +125,10 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
   pcl_utils::removeClosedPointCloud(cloud_out, cloud_out, 5);
 
   if (!(0 == splitScans(cloud_out, &scan_pts_))) {
-    ROS_ERROR_STREAM_FUNC("Failed to splitScans");
+    NLOG_ERROR_STREAM("Failed to splitScans");
     return -1;
   }
-  ROS_INFO_STREAM_FUNC("splitScans elapse " << tt.toc() << "ms.");
+  NLOG_INFO_STREAM("splitScans elapse " << tt.toc() << "ms.");
 
   tt.tic();
   for (int line = 0; line <= N; ++line) {
@@ -158,7 +158,7 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
       point_infos_[line][i].ind = i;
     }
   }
-  ROS_INFO_STREAM_FUNC("edge feature extract elapse " << tt.toc() << "ms.");
+  NLOG_INFO_STREAM("edge feature extract elapse " << tt.toc() << "ms.");
 
   tt.tic();
   for (int line = 0; line < N; ++line) {
@@ -277,10 +277,10 @@ bool LOAMFeatureExtractor<N>::extract(const PointCloudT::ConstPtr& cloud_in,
     ds_filter.filter(less_flat_cloud_ds);
     *features->less_flat_cloud += less_flat_cloud_ds;
   }
-  ROS_INFO_STREAM_FUNC("plane feature extract elapse " << tt.toc() << "ms.");
+  NLOG_INFO_STREAM("plane feature extract elapse " << tt.toc() << "ms.");
 
   // for (int i = 0; i < features->less_flat_cloud->size(); ++i) {
-  //   ROS_INFO_STREAM_FUNC(
+  //   NLOG_INFO_STREAM(
   //       "feature line: " << features->less_flat_cloud->at(i).line);
   // }
   return true;
